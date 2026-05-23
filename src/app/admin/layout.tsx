@@ -101,8 +101,8 @@ export default function DashboardLayout({
 
           {/* Nav Menu */}
           <nav className="p-4 space-y-1.5">
-            <Link href="/dashboard" className={`flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-              pathname === '/dashboard' 
+            <Link href="/admin" className={`flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+              pathname === '/admin' 
                 ? 'bg-surfaceLight text-primary border-l-2 border-primary shadow-lg shadow-primary/5' 
                 : 'text-slate-300 hover:bg-surfaceLight/50 hover:text-white'
             }`}>
@@ -112,8 +112,8 @@ export default function DashboardLayout({
               </div>
             </Link>
 
-            <Link href="/dashboard/reports" className={`flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-              pathname === '/dashboard/reports' 
+            <Link href="/admin/reports" className={`flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+              pathname === '/admin/reports' 
                 ? 'bg-surfaceLight text-primary border-l-2 border-primary shadow-lg shadow-primary/5' 
                 : 'text-slate-300 hover:bg-surfaceLight/50 hover:text-white'
             }`}>
@@ -123,8 +123,8 @@ export default function DashboardLayout({
               </div>
             </Link>
 
-            <Link href="/dashboard/map" className={`flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-              pathname === '/dashboard/map' 
+            <Link href="/admin/map" className={`flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+              pathname === '/admin/map' 
                 ? 'bg-surfaceLight text-primary border-l-2 border-primary shadow-lg shadow-primary/5' 
                 : 'text-slate-300 hover:bg-surfaceLight/50 hover:text-white'
             }`}>
@@ -134,8 +134,8 @@ export default function DashboardLayout({
               </div>
             </Link>
 
-            <Link href="/dashboard/sos" className={`flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-              pathname === '/dashboard/sos' 
+            <Link href="/admin/sos" className={`flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+              pathname === '/admin/sos' 
                 ? 'bg-surfaceLight text-primary border-l-2 border-primary shadow-lg shadow-primary/5' 
                 : 'text-slate-300 hover:bg-surfaceLight/50 hover:text-white'
             }`}>
@@ -150,8 +150,8 @@ export default function DashboardLayout({
               )}
             </Link>
 
-            <Link href="/dashboard/advisories" className={`flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-              pathname === '/dashboard/advisories' 
+            <Link href="/admin/advisories" className={`flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+              pathname === '/admin/advisories' 
                 ? 'bg-surfaceLight text-primary border-l-2 border-primary shadow-lg shadow-primary/5' 
                 : 'text-slate-300 hover:bg-surfaceLight/50 hover:text-white'
             }`}>

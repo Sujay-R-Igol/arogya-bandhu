@@ -4,6 +4,7 @@ import './globals.css'
 import React, { useEffect } from 'react'
 import { useSentinelStore } from '@/lib/store'
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription'
+import { usePathname } from 'next/navigation'
 
 export default function RootLayout({
   children,
@@ -16,9 +17,11 @@ export default function RootLayout({
   // Initialize live Supabase realtime subscriptions
   useRealtimeSubscription()
 
+  const pathname = usePathname()
+
   // Background Simulator Engine: Runs a tick every 35 seconds to feed reports & emergencies
   useEffect(() => {
-    if (!simulationActive) return
+    if (!simulationActive || !pathname?.startsWith('/admin')) return
 
     // Run first simulation tick after 10s to let dashboard load beautifully
     const initialDelay = setTimeout(() => {
@@ -33,7 +36,7 @@ export default function RootLayout({
       clearTimeout(initialDelay)
       clearInterval(interval)
     }
-  }, [simulationActive, tickSimulator])
+  }, [simulationActive, tickSimulator, pathname])
 
   return (
     <html lang="en">
@@ -43,7 +46,7 @@ export default function RootLayout({
         <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
         {/* Leaflet CSS required for client mapping */}
         <link
           rel="stylesheet"

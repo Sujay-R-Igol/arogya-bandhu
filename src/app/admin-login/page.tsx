@@ -23,7 +23,7 @@ export default function LoginPage() {
     setTimeout(() => {
       if (email.trim() === 'cho@sentinel.gov' && password === 'sentinel2026') {
         setIsAuthenticated(true)
-        router.push('/dashboard')
+        router.push('/admin')
       } else {
         setError('Access Denied: Invalid clinical credentials or signature.')
         setLoading(false)

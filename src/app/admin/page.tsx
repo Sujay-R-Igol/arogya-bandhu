@@ -163,7 +163,7 @@ export default function RegionalOverview() {
           <button 
             onClick={() => {
               playTone(880, 'sine', 0.1, 0.05)
-              router.push('/dashboard/map')
+              router.push('/admin/map')
             }}
             className="absolute bottom-4 right-4 p-3 bg-surfaceLight border border-border rounded-full hover:border-primary/50 text-slate-300 hover:text-primary transition shadow-xl cursor-pointer"
             title="Open Live Outbreak Map"
@@ -185,7 +185,7 @@ export default function RegionalOverview() {
                 <p className="text-[10px] text-muted">Surveillance audits and bulletins</p>
               </div>
               <button 
-                onClick={() => router.push('/dashboard/advisories')}
+                onClick={() => router.push('/admin/advisories')}
                 className="text-[10px] font-bold text-primary flex items-center gap-0.5 hover:underline uppercase tracking-widest"
               >
                 Full Report <ArrowUpRight className="w-3 h-3" />
