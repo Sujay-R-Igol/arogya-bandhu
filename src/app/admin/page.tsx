@@ -7,19 +7,7 @@ import DashboardStats from '@/components/features/DashboardStats'
 import { useSentinelStore } from '@/lib/store'
 import { playTone, playSuccessArpeggio } from '@/lib/audio'
 
-// Seed trend data for Recharts matching "Symptom Prevalence Trends" 30-day roll
-const trendData = [
-  { date: 'Oct 24', cases: 12 },
-  { date: 'Oct 28', cases: 18 },
-  { date: 'Nov 01', cases: 14 },
-  { date: 'Nov 05', cases: 22 },
-  { date: 'Nov 09', cases: 16 },
-  { date: 'Nov 12', cases: 42 }, // Peak activity reported
-  { date: 'Nov 16', cases: 28 },
-  { date: 'Nov 20', cases: 35 },
-  { date: 'Nov 24', cases: 19 },
-]
-
+// Dynamic trend data calculated in component
 export default function RegionalOverview() {
   const symptomReports = useSentinelStore((state) => state.symptomReports)
   const sosRequests = useSentinelStore((state) => state.sosRequests)
@@ -28,6 +16,8 @@ export default function RegionalOverview() {
   const resolveSOS = useSentinelStore((state) => state.resolveSOS)
   const soundEnabled = useSentinelStore((state) => state.soundEnabled)
   const currentUser = useSentinelStore((state) => state.currentUser)
+  const fetchInitialReports = useSentinelStore((state) => state.fetchInitialReports)
+  const subscribeToReports = useSentinelStore((state) => state.subscribeToReports)
 
   // Local state controls
   const [loading, setLoading] = useState(false)
@@ -36,13 +26,36 @@ export default function RegionalOverview() {
   const handleRefresh = () => {
     setLoading(true)
     playTone(700, 'sine', 0.15, 0.05)
-    setTimeout(() => {
+    fetchInitialReports().finally(() => {
       setLoading(false)
-    }, 600)
+    })
   }
+
+  useEffect(() => {
+    fetchInitialReports()
+    subscribeToReports()
+  }, [])
 
   // Calculate dynamic trends based on reports inside our Zustand database
   const activeSOS = sosRequests.filter(s => s.status !== 'RESOLVED')
+  
+  const dynamicTrendData = React.useMemo(() => {
+    const counts: Record<string, number> = {}
+    symptomReports.forEach(r => {
+      const datePart = r.timestamp.split(',')[0]
+      if (datePart) {
+        counts[datePart] = (counts[datePart] || 0) + 1
+      }
+    })
+    
+    // Sort chronologically (assuming current year, simple sort) or just output as is
+    const sorted = Object.entries(counts)
+      .map(([date, cases]) => ({ date, cases }))
+      // .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    
+    // Reverse because symptomReports is newest-first, we want chronologically ascending for chart
+    return sorted.reverse()
+  }, [symptomReports])
   
   // Custom tooltips for premium GIS styling
   const CustomTooltip = ({ active, payload }: any) => {
@@ -126,7 +139,7 @@ export default function RegionalOverview() {
         {/* Chart plot wrapper */}
         <div className="h-64 w-full relative">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+            <AreaChart data={dynamicTrendData.length > 0 ? dynamicTrendData : [{ date: 'Today', cases: 0 }]} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorCases" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#00F0FF" stopOpacity={0.25}/>
@@ -307,7 +320,7 @@ export default function RegionalOverview() {
                           </span>
                         </div>
                         <p className="text-[10.5px] text-slate-300 mt-1">
-                          {sos.village} • <span className="text-muted">{sos.latitude.toFixed(4)}, {sos.longitude.toFixed(4)}</span>
+                          {sos.village} • <span className="text-muted">{sos.latitude?.toFixed(4) ?? 'N/A'}, {sos.longitude?.toFixed(4) ?? 'N/A'}</span>
                         </p>
                       </div>
                     </div>
@@ -323,7 +336,7 @@ export default function RegionalOverview() {
                         </div>
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] text-muted font-bold">TEMP:</span>
-                          <span className="font-semibold text-slate-200">{sos.temperature}°C</span>
+                          <span className="font-semibold text-slate-200">{sos.temperature === 'N/A' ? 'N/A' : `${sos.temperature}°C`}</span>
                         </div>
                       </div>
 

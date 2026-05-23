@@ -9,8 +9,8 @@ export default function DashboardStats() {
   const sosRequests = useSentinelStore((state) => state.sosRequests)
 
   // Calculate dynamic stats from our real-time Zustand database
-  const totalReportsCount = symptomReports.length + 2539 // Seeded baseline
-  const activeAlertsCount = symptomReports.filter(r => r.severity === 'HIGH RISK').length + 1 // Seeded baseline
+  const totalReportsCount = symptomReports.length
+  const activeAlertsCount = symptomReports.filter(r => r.severity === 'HIGH RISK').length
   const pendingSOSCount = sosRequests.filter(s => s.status === 'PENDING').length
 
   const stats = [

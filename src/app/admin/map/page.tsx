@@ -44,8 +44,8 @@ export default function LiveMapPage() {
   })
 
   // Calculate dynamic active points
-  const activeSOS = sosRequests.filter(s => s.status !== 'RESOLVED')
-  const highRiskReports = symptomReports.filter(r => r.severity === 'HIGH RISK')
+  const activeSOS = sosRequests.filter(s => s.status !== 'RESOLVED' && s.latitude !== null && s.longitude !== null)
+  const highRiskReports = symptomReports.filter(r => r.severity === 'HIGH RISK' && r.latitude !== null && r.longitude !== null)
 
   const flyToCoordinates = (lat: number, lng: number) => {
     playTone(600, 'sine', 0.1, 0.05)
