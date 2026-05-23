@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #0B111E;
+    color: #F8FAFC;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow-x: hidden;
+  }
+
+  /* Custom scrollbar styling for premium SOC aesthetic */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0B111E;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #2C3A5A;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #00F0FF;
+  }
+}
+
+/* Glassmorphism utility card for SOC / Health intelligence paneling */
+.glass-card {
+  background: rgba(21, 29, 48, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(44, 58, 90, 0.6);
+  border-radius: 0.75rem;
+}
+
+.glass-card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card-hover:hover {
+  transform: translateY(-2px);
+  border-color: rgba(0, 240, 255, 0.4);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4), 0 0 15px rgba(0, 240, 255, 0.05);
+}
+
+/* Glowing text and alerts */
+.glow-cyan {
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+}
+
+.glow-red {
+  text-shadow: 0 0 8px rgba(255, 59, 48, 0.6);
+}
+
+/* Pulsing markers for live maps */
+.pulse-circle {
+  border-radius: 50%;
+  background: #FF3B30;
+  box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7);
+  animation: mapPulse 1.6s infinite cubic-bezier(0.66, 0, 0, 1);
+}
+
+@keyframes mapPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 59, 48, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 59, 48, 0);
+  }
+}
+
+/* Leaflet integration fixes */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background-color: #151D30 !important;
+  border-radius: 0.75rem;
+}
+
+.leaflet-bar {
+  border: 1px solid #2C3A5A !important;
+  background-color: #151D30 !important;
+}
+
+.leaflet-bar a {
+  background-color: #151D30 !important;
+  color: #F8FAFC !important;
+  border-bottom: 1px solid #2C3A5A !important;
+}
+
+.leaflet-bar a:hover {
+  background-color: #1E2942 !important;
+  color: #00F0FF !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #151D30 !important;
+  color: #F8FAFC !important;
+  border: 1px solid #2C3A5A !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+}
+
+.leaflet-popup-tip {
+  background: #151D30 !important;
+  border: 1px solid #2C3A5A !important;
+}
