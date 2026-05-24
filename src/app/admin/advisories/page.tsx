@@ -13,7 +13,10 @@ import {
   Check, 
   Trash2,
   Bell,
-  Heart
+  Heart,
+  ShieldAlert,
+  Volume2,
+  PlayCircle
 } from 'lucide-react'
 import { useSentinelStore } from '@/lib/store'
 import { supabaseClient } from '@/lib/supabase/client'
@@ -357,60 +360,82 @@ export default function AdvisoriesCMS() {
             <div className="absolute top-0 inset-x-0 w-28 h-3.5 bg-slate-800 mx-auto rounded-b-xl z-20" />
             
             {/* Main Phone screen wrapper */}
-            <div className="w-full h-full bg-[#080d19] rounded-[20px] p-3 overflow-y-auto flex flex-col justify-between relative border border-border/40 select-none">
+            <div className="w-full h-full bg-[#0B1C17] rounded-[20px] p-4 overflow-y-auto flex flex-col relative border border-border/40 select-none">
               
               {/* Phone App Header */}
-              <div>
-                <div className="flex justify-between items-center text-[8px] text-slate-400 border-b border-border/40 pb-2 mb-4 pt-1">
-                  <span className="font-bold flex items-center gap-0.5">
-                    <Heart className="w-2.5 h-2.5 text-danger" /> PHC Connect
-                  </span>
-                  <span>16:40 PM</span>
-                </div>
+              <div className="flex items-center gap-2 mb-4 pt-4">
+                <h1 className="text-xl font-bold text-white">Alerts</h1>
+                <span className="bg-[#E75B4B] text-white text-[8px] font-bold px-2 py-0.5 rounded-full">
+                  1 New
+                </span>
+              </div>
+              
+              {(() => {
+                const isUrgent = activeAdvisory.threat_level === 'CRITICAL' || activeAdvisory.threat_level === 'HIGH';
+                const isVideo = activeAdvisory.media_type === 'video';
+                const isAudio = activeAdvisory.media_type === 'audio';
 
-                {/* Simulated Content Card */}
-                <div className="space-y-3">
-                  
-                  {/* Category warning banner */}
-                  <div className={`p-2.5 rounded-lg border text-[10px] ${
-                    activeAdvisory.threat_level === 'CRITICAL' ? 'bg-danger/10 border-danger/30 text-danger-hover' :
-                    activeAdvisory.threat_level === 'HIGH' || activeAdvisory.threat_level === 'MODERATE' ? 'bg-warning/10 border-warning/30 text-warning' :
-                    'bg-primary/5 border-primary/25 text-slate-300'
-                  } flex items-start gap-2 leading-relaxed font-semibold`}>
-                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold block uppercase text-[8px] tracking-wider mb-0.5">{activeAdvisory.category} NOTICE - {activeAdvisory.affected_area}</span>
-                      {activeAdvisory.threat_level === 'CRITICAL' ? 'High severity health advisory active in your village area.' : 'General health surveillance protocol advice.'}
+                // Choose styles based on threat level
+                const cardBg = isUrgent ? 'bg-[#FFFDF7]' : activeAdvisory.threat_level === 'MODERATE' ? 'bg-[#E6F5ED]' : 'bg-[#152A23] border border-[#234237]';
+                const titleColor = isUrgent ? 'text-[#0B1C17]' : activeAdvisory.threat_level === 'MODERATE' ? 'text-[#0B1C17]' : 'text-white';
+                const descColor = isUrgent ? 'text-[#0B1C17]/70' : activeAdvisory.threat_level === 'MODERATE' ? 'text-[#0B1C17]/70' : 'text-[#87A89A]';
+
+                return (
+                  <div className={`${cardBg} rounded-[20px] overflow-hidden ${!isUrgent && activeAdvisory.threat_level !== 'MODERATE' ? '' : 'shadow-lg'}`}>
+                    <div className="p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <span className={`text-[9px] font-bold tracking-widest uppercase ${isUrgent ? 'text-[#E75B4B]' : activeAdvisory.threat_level === 'MODERATE' ? 'text-[#2D7A50]' : 'text-blue-400'}`}>
+                          {isUrgent ? '⚠ Urgent' : activeAdvisory.threat_level === 'MODERATE' ? '📢 Update' : 'ℹ Info'}
+                        </span>
+                        <span className={`text-[8px] font-medium ${isUrgent ? 'text-gray-400' : 'text-[#0B1C17]/40'}`}>
+                          {activeAdvisory.created_at ? activeAdvisory.created_at.split('T')[0] : ''}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-start gap-2 mb-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isUrgent ? 'bg-red-100 text-[#E75B4B]' : activeAdvisory.threat_level === 'MODERATE' ? 'bg-white text-[#2D7A50] shadow-sm' : 'bg-blue-500/20'}`}>
+                          {isUrgent ? <ShieldAlert className="w-4 h-4" /> : activeAdvisory.threat_level === 'MODERATE' ? <span className="text-sm">💉</span> : <span className="text-sm">💧</span>}
+                        </div>
+                        <div>
+                          <h2 className={`${titleColor} font-bold text-base leading-tight`}>{activeAdvisory.title}</h2>
+                          <p className={`${titleColor} opacity-60 font-medium text-[9px] mt-0.5 uppercase tracking-wider`}>{activeAdvisory.affected_area}</p>
+                        </div>
+                      </div>
+                      
+                      {isUrgent ? (
+                        <p className={`${descColor} text-[11px] bg-black/5 p-2.5 rounded-xl mb-4 leading-relaxed font-medium whitespace-pre-wrap`}>
+                          {activeAdvisory.message}
+                        </p>
+                      ) : (
+                        <p className={`${descColor} text-[11px] mt-2 leading-relaxed mb-3 whitespace-pre-wrap`}>
+                          {activeAdvisory.message}
+                        </p>
+                      )}
+                      
+                      {isAudio && activeAdvisory.media_url && (
+                        <div className="w-full py-2.5 rounded-xl bg-[#E75B4B] text-white font-bold text-[10px] flex items-center justify-center gap-1.5 shadow-md shadow-[#E75B4B]/20">
+                          <Volume2 className="w-3.5 h-3.5" />
+                          Play Audio
+                        </div>
+                      )}
+
+                      {isVideo && activeAdvisory.media_url && (
+                        <div className="flex items-center gap-2">
+                          <div className="bg-[#0B1C17]/10 text-[#0B1C17]/70 text-[9px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1">
+                            <PlayCircle className="w-3 h-3" />
+                            Watch Video
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
+                );
+              })()}
 
-                  {/* Bulletin Title */}
-                  <h4 className="text-sm font-extrabold text-white leading-tight">
-                    {activeAdvisory.title}
-                  </h4>
-
-                  {/* Bulleting body text */}
-                  <p className="text-[10px] text-slate-300 leading-relaxed max-h-56 overflow-y-auto border-t border-border/20 pt-2 whitespace-pre-wrap font-medium">
-                    {activeAdvisory.message}
-                  </p>
-                  
-                  {activeAdvisory.media_type !== 'none' && (
-                    <div className="mt-2 p-2 bg-slate-800 rounded flex items-center justify-between">
-                      <span className="text-[10px] text-white">Has attached {activeAdvisory.media_type}</span>
-                    </div>
-                  )}
-                </div>
+              {/* Phone App Footer navigation Mock */}
+              <div className="absolute bottom-2 inset-x-0 flex justify-center">
+                <div className="h-1 w-24 bg-slate-700/50 rounded-full" />
               </div>
-
-              {/* Phone App Footer navigation */}
-              <div className="border-t border-border/40 pt-2 mt-4 text-center">
-                <span className="text-[7.5px] text-slate-500 font-extrabold tracking-widest uppercase">
-                  Published {activeAdvisory.created_at ? activeAdvisory.created_at.split('T')[0] : ''}
-                </span>
-                
-                <div className="h-1 w-24 bg-slate-700 rounded-full mx-auto mt-2" />
-              </div>
-
             </div>
 
           </div>

@@ -82,6 +82,83 @@ export default function RegionalOverview() {
     return null
   }
 
+  // Generate Realtime Operational Feed
+  const operationalFeed = React.useMemo(() => {
+    const feed: any[] = [];
+    
+    // 1. High-Risk Disease Events
+    symptomReports.forEach(r => {
+      if (r.severity === 'HIGH RISK' || r.severity === 'MODERATE') {
+        const titleCat = r.clinical_category ? r.clinical_category.toLowerCase() : 'health';
+        feed.push({
+          id: `report-${r.id}`,
+          type: 'report',
+          title: `${r.severity === 'HIGH RISK' ? 'High-risk' : 'Moderate'} ${titleCat} report detected in ${r.origin || 'Bhogadi'}`,
+          severity: r.severity === 'HIGH RISK' ? 'CRITICAL' : 'MODERATE',
+          message: `Reported by ${r.reporter_name || 'ASHA Worker'}`,
+          timestamp: r.timestamp,
+          rawDate: new Date(r.timestamp)
+        });
+      }
+    });
+
+    // 2. Advisory Publications
+    advisories.forEach(a => {
+      feed.push({
+        id: `adv-${a.id}`,
+        type: 'advisory',
+        title: a.title,
+        severity: a.threat_level || 'INFO',
+        message: a.category ? `${a.category} notice published` : 'Notice published',
+        timestamp: a.created_at || new Date().toISOString(),
+        rawDate: new Date(a.created_at || 0)
+      });
+    });
+
+    // 3. Cluster Detection Events
+    const wardMap: Record<string, { count: number, highRisk: number }> = {};
+    symptomReports.filter(r => r.status !== 'RESOLVED').forEach(r => {
+      const w = r.origin || 'Unknown';
+      if (!wardMap[w]) wardMap[w] = { count: 0, highRisk: 0 };
+      wardMap[w].count++;
+      if (r.severity === 'HIGH RISK') wardMap[w].highRisk++;
+    });
+
+    Object.entries(wardMap).forEach(([ward, data]) => {
+      if (data.count >= 3 && ward !== 'Unknown') {
+        feed.push({
+          id: `cluster-${ward}`,
+          type: 'cluster',
+          title: `Cluster monitoring activated in ${ward}`,
+          severity: data.highRisk > 0 ? 'CRITICAL' : 'MODERATE',
+          message: `${data.count} active cases under PHC observation`,
+          timestamp: new Date().toISOString(),
+          rawDate: new Date()
+        });
+      }
+    });
+
+    // Sort by newest first
+    feed.sort((a, b) => b.rawDate.getTime() - a.rawDate.getTime());
+    
+    return feed;
+  }, [symptomReports, advisories]);
+
+  const getRelativeTime = (rawDate: Date) => {
+    if (isNaN(rawDate.getTime())) return 'Recently';
+    const diff = Math.floor((new Date().getTime() - rawDate.getTime()) / 1000);
+    if (diff < 0) return 'Just now';
+    if (diff < 60) return `${diff} secs ago`;
+    const mins = Math.floor(diff / 60);
+    if (mins < 60) return `${mins} mins ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    const days = Math.floor(hours / 24);
+    if (days === 1) return `Yesterday`;
+    if (days < 7) return `${days} days ago`;
+    return rawDate.toLocaleDateString();
+  };
+
   return (
     <div className="space-y-6">
       
@@ -199,13 +276,13 @@ export default function RegionalOverview() {
       {/* Grid columns: Recent Activity Feed & Active SOS Requests */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* LEFT COLUMN: Intelligence Feed (Advisories & Clusters) */}
+        {/* LEFT COLUMN: Operations Feed */}
         <div className="lg:col-span-5 glass-card p-5 bg-surface/50 border border-border/80 rounded-xl flex flex-col justify-between">
           <div>
             <div className="flex justify-between items-center mb-4">
               <div>
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Intelligence Feed</h3>
-                <p className="text-[10px] text-muted">Surveillance audits and bulletins</p>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Public Health Operations Feed</h3>
+                <p className="text-[10px] text-muted">Realtime monitoring updates and field advisories</p>
               </div>
               <button 
                 onClick={() => router.push('/admin/advisories')}
@@ -216,60 +293,41 @@ export default function RegionalOverview() {
             </div>
 
             {/* List entries */}
-            <div className="space-y-3.5">
-              
-              {/* Core cholera seed */}
-              <div className="flex gap-3 p-3 bg-surfaceLight/30 border border-border/40 rounded-lg hover:border-border/80 transition duration-150">
-                <div className="w-8 h-8 rounded-lg bg-danger/10 border border-danger/25 flex items-center justify-center shrink-0 mt-0.5">
-                  <AlertCircle className="w-4 h-4 text-danger animate-pulse" />
+            <div className="space-y-3.5 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+              {operationalFeed.length === 0 ? (
+                <div className="p-8 text-center border border-dashed border-border/60 rounded-xl text-xs text-muted flex flex-col items-center justify-center gap-2">
+                  <ShieldCheck className="w-6 h-6 text-primary/50" />
+                  <p>No active field surveillance updates currently available.</p>
                 </div>
-                <div className="truncate">
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-xs font-bold text-white">Suspected Cholera Cluster</h4>
-                    <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-danger text-white uppercase">CRITICAL</span>
-                  </div>
-                  <p className="text-[10.5px] text-slate-300 mt-0.5">North Province • Active Tracking • 2h ago</p>
-                </div>
-              </div>
-
-              {/* Core Influenza Alpha seed */}
-              <div className="flex gap-3 p-3 bg-surfaceLight/30 border border-border/40 rounded-lg hover:border-border/80 transition duration-150">
-                <div className="w-8 h-8 rounded-lg bg-warning/10 border border-warning/25 flex items-center justify-center shrink-0 mt-0.5">
-                  <AlertCircle className="w-4 h-4 text-warning" />
-                </div>
-                <div className="truncate">
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-xs font-bold text-white">Influenza Alpha Spike</h4>
-                    <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-warning text-background uppercase">MODERATE</span>
-                  </div>
-                  <p className="text-[10.5px] text-slate-300 mt-0.5">Central Valley • Surveillance • 5h ago</p>
-                </div>
-              </div>
-
-              {/* Dynamic Advisories list */}
-              {advisories.slice(0, 2).map((adv) => (
-                <div key={adv.id} className="flex gap-3 p-3 bg-surfaceLight/30 border border-border/40 rounded-lg hover:border-border/80 transition duration-150">
-                  <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/25 flex items-center justify-center shrink-0 mt-0.5">
-                    <ShieldCheck className="w-4 h-4 text-primary" />
-                  </div>
-                  <div className="truncate">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-bold text-white truncate max-w-[180px]">{adv.title}</h4>
-                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-extrabold ${
-                        adv.category === 'CRITICAL' ? 'bg-danger text-white' : 
-                        adv.category === 'WARNING' ? 'bg-warning text-background' : 
-                        'bg-slate-700 text-slate-300'
-                      } uppercase`}>
-                        {adv.category}
-                      </span>
+              ) : (
+                operationalFeed.slice(0, 15).map((item) => (
+                  <div key={item.id} className="flex gap-3 p-3 bg-surfaceLight/30 border border-border/40 rounded-lg hover:border-border/80 transition duration-150">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                      item.severity === 'CRITICAL' || item.severity === 'HIGH' ? 'bg-danger/10 border border-danger/25 text-danger' :
+                      item.severity === 'MODERATE' || item.severity === 'WARNING' ? 'bg-warning/10 border border-warning/25 text-warning' :
+                      'bg-primary/10 border border-primary/25 text-primary'
+                    }`}>
+                      {item.type === 'advisory' ? <ShieldCheck className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
                     </div>
-                      <p className="text-[10.5px] text-slate-300 mt-0.5 truncate max-w-[280px]">
-                        {adv.message}
+                    <div className="truncate w-full">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <h4 className="text-xs font-bold text-white truncate">{item.title}</h4>
+                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase shrink-0 ${
+                          item.severity === 'CRITICAL' || item.severity === 'HIGH' ? 'bg-danger text-white' : 
+                          item.severity === 'MODERATE' || item.severity === 'WARNING' ? 'bg-warning text-background' : 
+                          'bg-slate-700 text-slate-300'
+                        }`}>
+                          {item.severity}
+                        </span>
+                      </div>
+                      <p className="text-[10.5px] text-slate-300 truncate">
+                        {item.message}
                       </p>
-                    <span className="text-[9px] text-muted mt-1 block">{adv.created_at}</span>
+                      <span className="text-[9px] text-muted mt-1 block">{getRelativeTime(item.rawDate)}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
           

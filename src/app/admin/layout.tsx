@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { useSentinelStore } from '@/lib/store'
 import { stopEmergencyAlarm, playTone } from '@/lib/audio'
+import { getCurrentAdmin, logoutAdmin } from '@/lib/auth'
 
 export default function DashboardLayout({
   children
@@ -40,6 +41,12 @@ export default function DashboardLayout({
 
   // State bindings from global Zustand store
   const currentUser = useSentinelStore((state) => state.currentUser)
+  const setCurrentUser = useSentinelStore((state) => state.setCurrentUser)
+  const isAuthenticating = useSentinelStore((state) => state.isAuthenticating)
+  const setIsAuthenticating = useSentinelStore((state) => state.setIsAuthenticating)
+  const isAuthenticated = useSentinelStore((state) => state.isAuthenticated)
+  const setIsAuthenticated = useSentinelStore((state) => state.setIsAuthenticated)
+  
   const systemConnected = useSentinelStore((state) => state.systemConnected)
   const soundEnabled = useSentinelStore((state) => state.soundEnabled)
   const setSoundEnabled = useSentinelStore((state) => state.setSoundEnabled)
@@ -58,6 +65,35 @@ export default function DashboardLayout({
   // Local state controls
   const [notifOpen, setNotifOpen] = useState(false)
   const [etaValue, setEtaValue] = useState('04:15')
+
+  // Validation Effect
+  useEffect(() => {
+    const validateAccess = async () => {
+      setIsAuthenticating(true)
+      const adminData = await getCurrentAdmin()
+      
+      console.log("ADMIN SESSION:", adminData);
+
+      if (!adminData) {
+        setIsAuthenticated(false)
+        setCurrentUser(null)
+        router.replace('/admin-login')
+      } else {
+        setIsAuthenticated(true)
+        setCurrentUser(adminData)
+        setIsAuthenticating(false)
+      }
+    }
+    validateAccess()
+  }, [router, setCurrentUser, setIsAuthenticated, setIsAuthenticating])
+
+  const handleLogout = async () => {
+    stopEmergencyAlarm()
+    await logoutAdmin()
+    setIsAuthenticated(false)
+    setCurrentUser(null)
+    router.push('/admin-login')
+  }
 
   const pendingSOSCount = sosRequests.filter(s => s.status === 'PENDING').length
   const unreadNotifCount = notifications.filter(n => !n.read).length
@@ -78,6 +114,20 @@ export default function DashboardLayout({
     // If they dismiss the popup, we silences the active siren but keep it pending in queue
     stopEmergencyAlarm()
     setActiveSOSAlert(null)
+  }
+
+  if (isAuthenticating || !currentUser) {
+    return (
+      <div className="flex min-h-screen bg-[#040810] text-slate-100 items-center justify-center flex-col gap-5">
+        <div className="relative">
+          <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full animate-pulse" />
+          <div className="w-16 h-16 bg-surface border border-border rounded-2xl flex items-center justify-center relative shadow-2xl">
+            <Shield className="w-8 h-8 text-primary" />
+          </div>
+        </div>
+        <p className="text-xs text-muted font-bold tracking-widest uppercase animate-pulse">Validating PHC Operations Access...</p>
+      </div>
+    )
   }
 
   return (
@@ -197,22 +247,25 @@ export default function DashboardLayout({
 
           {/* Profile Badge card */}
           <div className="flex items-center gap-3 p-2 bg-[#0C1425] rounded-xl border border-border/80">
-            <img 
-              src={currentUser.image} 
-              alt={currentUser.name} 
-              className="w-10 h-10 rounded-lg object-cover border border-border"
-            />
-            <div className="truncate">
-              <h4 className="text-xs font-bold text-white truncate">{currentUser.name}</h4>
-              <p className="text-[10px] text-muted font-semibold truncate">{currentUser.title}</p>
+            {currentUser?.image ? (
+              <img 
+                src={currentUser.image} 
+                alt={currentUser.name} 
+                className="w-10 h-10 rounded-lg object-cover border border-border"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-lg bg-surface border border-border flex items-center justify-center">
+                <Shield className="w-5 h-5 text-primary" />
+              </div>
+            )}
+            <div className="truncate w-32">
+              <h4 className="text-xs font-bold text-white truncate">{currentUser?.name || 'Authorized Personnel'}</h4>
+              <p className="text-[10px] text-muted font-semibold truncate">{currentUser?.title || 'System Admin'}</p>
             </div>
             <button 
-              onClick={() => {
-                stopEmergencyAlarm()
-                router.push('/')
-              }}
+              onClick={handleLogout}
               title="Sign Out Console"
-              className="p-1 rounded-md text-muted hover:text-danger hover:bg-surfaceLight/50 ml-auto transition duration-150"
+              className="p-1.5 rounded-md text-muted hover:text-danger hover:bg-surfaceLight/50 ml-auto transition duration-150 shrink-0"
             >
               <Power className="w-3.5 h-3.5" />
             </button>

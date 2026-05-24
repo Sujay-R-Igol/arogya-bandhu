@@ -122,10 +122,12 @@ export interface SystemNotification {
 
 interface SentinelState {
   // Authentication & Session
-  currentUser: { name: string; title: string; image: string }
-  setCurrentUser: (user: { name: string; title: string; image: string }) => void
+  currentUser: { name: string; title: string; image: string; role?: string; email?: string } | null
+  setCurrentUser: (user: { name: string; title: string; image: string; role?: string; email?: string } | null) => void
   isAuthenticated: boolean
   setIsAuthenticated: (val: boolean) => void
+  isAuthenticating: boolean
+  setIsAuthenticating: (val: boolean) => void
 
   // Data arrays
   symptomReports: SymptomReport[]
@@ -245,14 +247,12 @@ let realtimeSubscription: any = null;
 let advisoriesSubscription: any = null;
 
 export const useSentinelStore = create<SentinelState>((set, get) => ({
-  currentUser: {
-    name: 'Bhogadi PHC Control Desk',
-    title: 'Primary Health Centre Surveillance Unit',
-    image: 'https://api.dicebear.com/7.x/shapes/svg?seed=BhogadiPHC&backgroundColor=0f172a&shape1Color=3b82f6'
-  },
+  currentUser: null,
   setCurrentUser: (user) => set({ currentUser: user }),
-  isAuthenticated: true, 
+  isAuthenticated: false, 
   setIsAuthenticated: (val) => set({ isAuthenticated: val }),
+  isAuthenticating: true,
+  setIsAuthenticating: (val) => set({ isAuthenticating: val }),
 
   symptomReports: initialReports,
   sosRequests: initialSOS,

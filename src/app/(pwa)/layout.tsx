@@ -36,7 +36,6 @@ export default function PWALayout({
 
   const navItems = [
     { icon: Home, label: t.home, path: '/home' },
-    { icon: MapPin, label: t.hotspots, path: '/hotspots' },
     { icon: Clock, label: t.history, path: '/history' },
     { icon: Bell, label: t.alerts, path: '/alerts' },
     { icon: User, label: t.profile, path: '/profile' },

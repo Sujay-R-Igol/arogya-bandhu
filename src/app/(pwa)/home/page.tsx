@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { ChevronRight, Phone, Plus, Flame } from 'lucide-react';
+import { ChevronRight, Phone, Plus, Bell } from 'lucide-react';
 import { useAppStore } from '@/lib/stores/appStore';
 import { translations } from '@/lib/i18n/translations';
 
@@ -40,16 +40,16 @@ export default function PWAHomePage() {
           </div>
         </Link>
 
-        {/* View Hotspots Card */}
-        <Link href="/hotspots" className="block">
+        {/* View Alerts Card */}
+        <Link href="/alerts" className="block">
           <div className="bg-[#E3EFE8] rounded-[24px] p-6 flex items-start justify-between relative overflow-hidden group shadow-lg">
             <div className="z-10 w-full">
               <div className="w-10 h-10 rounded-full bg-[#C5D9CE] flex items-center justify-center mb-4">
-                <Flame className="w-5 h-5 text-[#0B1C17] fill-[#0B1C17]" />
+                <Bell className="w-5 h-5 text-[#0B1C17]" />
               </div>
-              <h3 className="text-[#0B1C17] font-serif font-bold text-2xl">{t.viewHotspots}</h3>
-              {language === 'en' && <p className="text-[#0B1C17] font-bold text-sm mb-1 mt-1">{translations.kn.viewHotspots}</p>}
-              <p className="text-[#0B1C17]/70 text-sm mt-3 pr-12 max-w-[85%]">{t.viewHotspotsDesc}</p>
+              <h3 className="text-[#0B1C17] font-serif font-bold text-2xl">{language === 'en' ? 'Community Alerts' : t.alerts}</h3>
+              {language === 'en' && <p className="text-[#0B1C17] font-bold text-sm mb-1 mt-1">{translations.kn.alerts}</p>}
+              <p className="text-[#0B1C17]/70 text-sm mt-3 pr-12 max-w-[85%]">Check local health advisories, hygiene notices, and community updates.</p>
             </div>
             
             {/* Decorative map shape right side */}
