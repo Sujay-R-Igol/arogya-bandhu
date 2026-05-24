@@ -41,6 +41,7 @@ export default function ReportFlowPage() {
   const [step, setStep] = useState(1);
   const [selectedDisease, setSelectedDisease] = useState<string | null>(null);
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
+  const [otherSymptomText, setOtherSymptomText] = useState('');
   const [severity, setSeverity] = useState<string | null>(null);
   const [peopleCount, setPeopleCount] = useState(3);
   const [selectedWard, setSelectedWard] = useState<string>(ward || 'Bhogadi');
@@ -54,12 +55,20 @@ export default function ReportFlowPage() {
   const handleSubmit = async () => {
     if (!selectedDisease || !severity) return;
     setIsSubmitting(true);
+    
+    const finalSymptoms = selectedSymptoms.map(s => {
+      if (s === 'other' && otherSymptomText.trim()) {
+        return `Other: ${otherSymptomText.trim()}`;
+      }
+      return s;
+    });
+
     const { data, error } = await supabaseClient
       .from('health_reports')
       .insert([
         {
           disease: selectedDisease,
-          symptoms: selectedSymptoms,
+          symptoms: finalSymptoms,
           severity,
           people_count: peopleCount,
           location: getWardCoordinates(selectedWard),
@@ -184,6 +193,18 @@ export default function ReportFlowPage() {
                 );
               })}
             </div>
+            
+            {selectedSymptoms.includes('other') && (
+              <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                <input
+                  type="text"
+                  placeholder="Please describe other symptoms..."
+                  value={otherSymptomText}
+                  onChange={(e) => setOtherSymptomText(e.target.value)}
+                  className="w-full bg-pwa-surface border-2 border-pwa-primary/30 rounded-[20px] p-4 text-white text-sm outline-none focus:border-pwa-primary transition-colors"
+                />
+              </div>
+            )}
           </div>
         )}
 
