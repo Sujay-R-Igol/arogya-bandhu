@@ -22,10 +22,15 @@ export default function FlowLayout({
         {/* Header */}
         <header className="px-5 pt-6 pb-4 flex items-center justify-between z-10 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-pwa-primary flex items-center justify-center">
-              <BriefcaseMedical className="w-5 h-5 text-pwa-bg" strokeWidth={2} />
+            <div className="w-9 h-9 rounded-xl bg-[#080d0b] flex items-center justify-center overflow-hidden border border-pwa-border shadow-inner relative">
+              <img 
+                src="/logo.png" 
+                alt="Arogya Bandhu" 
+                className="w-[115%] h-[115%] object-cover mix-blend-screen absolute" 
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
             </div>
-            <span className="font-bold text-base tracking-wide text-white">Rural Health</span>
+            <span className="font-extrabold text-base tracking-wide text-white">Arogya<span className="text-pwa-primary">bandhu</span></span>
           </div>
           <button
             onClick={toggleLanguage}

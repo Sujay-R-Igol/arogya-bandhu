@@ -36,12 +36,21 @@ export default function LoginPage() {
     <div className="relative min-h-screen flex items-center justify-center bg-background px-4 overflow-hidden">
       <div className="w-full max-w-md z-10">
         {/* Branding header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-surface border border-border shadow-lg shadow-black/40 mb-4">
-            <Shield className="w-7 h-7 text-primary" />
+        <div className="text-center mb-8 flex flex-col items-center">
+          <div className="w-24 h-24 mb-4 relative rounded-3xl p-0.5 bg-gradient-to-br from-primary/30 via-border to-surface shadow-[0_10px_40px_-10px_rgba(0,240,255,0.2)]">
+            <div className="w-full h-full rounded-[1.4rem] overflow-hidden bg-[#080d0b] relative flex items-center justify-center shadow-inner">
+              <img 
+                src="/logo.png" 
+                alt="Arogya Bandhu Logo" 
+                className="w-[115%] h-[115%] max-w-none object-cover mix-blend-screen absolute" 
+                onError={(e) => { 
+                  e.currentTarget.style.display = 'none'; 
+                }} 
+              />
+            </div>
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-white font-sans">
-            Bhogadi PHC
+            Arogya Bandhu
           </h1>
           <p className="text-sm text-muted mt-1 font-medium tracking-widest uppercase">
             Operations Dashboard

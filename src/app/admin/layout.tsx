@@ -116,13 +116,13 @@ export default function DashboardLayout({
     setActiveSOSAlert(null)
   }
 
-  if (isAuthenticating || !currentUser) {
+    if (isAuthenticating || !currentUser) {
     return (
       <div className="flex min-h-screen bg-[#040810] text-slate-100 items-center justify-center flex-col gap-5">
         <div className="relative">
           <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full animate-pulse" />
-          <div className="w-16 h-16 bg-surface border border-border rounded-2xl flex items-center justify-center relative shadow-2xl">
-            <Shield className="w-8 h-8 text-primary" />
+          <div className="w-16 h-16 bg-surface border border-border rounded-2xl flex items-center justify-center overflow-hidden relative shadow-2xl">
+            <img src="/logo.png" alt="Arogya Bandhu" className="w-[115%] h-[115%] max-w-none object-cover mix-blend-screen absolute" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
           </div>
         </div>
         <p className="text-xs text-muted font-bold tracking-widest uppercase animate-pulse">Validating PHC Operations Access...</p>
@@ -140,12 +140,12 @@ export default function DashboardLayout({
         <div>
           {/* Header Brand */}
           <div className="p-6 border-b border-border flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-surface border border-primary/20 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-primary glow-cyan" />
+            <div className="w-9 h-9 rounded-xl bg-surface border border-primary/20 flex items-center justify-center overflow-hidden relative">
+              <img src="/logo.png" alt="Arogya Bandhu" className="w-[115%] h-[115%] max-w-none object-cover mix-blend-screen absolute" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
             </div>
             <div>
-              <h2 className="text-sm font-bold tracking-wider text-white">Sentinel</h2>
-              <p className="text-[10px] text-muted font-semibold uppercase tracking-widest">Clinical Intelligence</p>
+              <h2 className="text-sm font-bold tracking-wider text-white">Arogya Bandhu</h2>
+              <p className="text-[9px] text-muted font-semibold uppercase tracking-widest">Smart Health Alerts</p>
             </div>
           </div>
 
