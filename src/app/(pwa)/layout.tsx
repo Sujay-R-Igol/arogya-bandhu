@@ -24,6 +24,8 @@ export default function PWALayout({
   }, []);
 
   const isAuthRoute = pathname.startsWith('/onboarding') || pathname.startsWith('/login');
+  const isReportRoute = pathname.startsWith('/report');
+  const hideGlobalUI = isAuthRoute || isReportRoute;
 
   // If user is not logged in and not already on onboarding or login, redirect
   React.useEffect(() => {
@@ -44,12 +46,19 @@ export default function PWALayout({
     { icon: User, label: t.profile, path: '/profile' },
   ];
 
+  // If it's a route that handles its own layout entirely (like /report),
+  // we might want to bypass the outer container as well.
+  // Wait, if it's nested inside the outer layout, the outer layout still renders its wrapper.
+  if (isReportRoute) {
+    return <>{children}</>;
+  }
+
   return (
     <div className="min-h-screen bg-black flex justify-center text-white font-sans">
       <div className="w-full max-w-md bg-pwa-bg h-screen flex flex-col relative shadow-2xl overflow-hidden">
         
         {/* Header */}
-        {!isAuthRoute && (
+        {!hideGlobalUI && (
           <header className="px-5 pt-6 pb-4 flex items-center justify-between z-10 shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-[#080d0b] flex items-center justify-center overflow-hidden border border-pwa-border shadow-inner relative">
@@ -75,12 +84,12 @@ export default function PWALayout({
         )}
 
         {/* Main Content Area */}
-        <main className={`flex-1 overflow-y-auto scrollbar-hide ${!isAuthRoute ? 'pb-24' : ''}`}>
+        <main className={`flex-1 overflow-y-auto scrollbar-hide ${!hideGlobalUI ? 'pb-24' : ''}`}>
           {children}
         </main>
 
         {/* Bottom Navigation */}
-        {!isAuthRoute && (
+        {!hideGlobalUI && (
           <nav className="absolute bottom-0 w-full bg-pwa-bg border-t border-pwa-border/50 px-4 pt-3 pb-6 z-20">
             <div className="flex items-end justify-between">
               {navItems.map((item) => {

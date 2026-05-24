@@ -1,15 +1,51 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { User, ChevronRight, Settings, MapPin, Bell, Info, LogOut } from 'lucide-react';
 import { useAppStore } from '@/lib/stores/appStore';
 import { translations } from '@/lib/i18n/translations';
 import { useRouter } from 'next/navigation';
+import { supabaseClient } from '@/lib/supabase/client';
 
 export default function ProfilePage() {
-  const { language, setIsLoggedIn, role, setRole, displayName, setDisplayName, ward, setWard } = useAppStore();
+  const { language, setIsLoggedIn, role, setRole, displayName, setDisplayName, ward, setWard, userId } = useAppStore();
   const router = useRouter();
   const t = translations[language] as any;
+
+  const [reportsCount, setReportsCount] = useState(0);
+  const [alertsCount, setAlertsCount] = useState(0);
+  const [sosCount, setSosCount] = useState(0);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const fetchStats = async () => {
+      // Fetch total reports for the user
+      const { count: totalReports } = await supabaseClient
+        .from('health_reports')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+
+      // Fetch SOS (emergency) reports for the user
+      const { count: emergencyReports } = await supabaseClient
+        .from('health_reports')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('severity', 'emergency');
+
+      // Fetch active alerts
+      const { count: activeAlerts } = await supabaseClient
+        .from('advisories')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'ACTIVE');
+
+      setReportsCount(totalReports || 0);
+      setSosCount(emergencyReports || 0);
+      setAlertsCount(activeAlerts || 0);
+    };
+
+    fetchStats();
+  }, [userId]);
 
   const handleLogout = () => {
     setIsLoggedIn(false);
@@ -45,9 +81,9 @@ export default function ProfilePage() {
       {/* Stats */}
       <div className="flex gap-3 mb-8">
         {[
-          { count: 7, label: t.reportsCount },
-          { count: 3, label: t.alertsCount },
-          { count: 2, label: t.sosCount },
+          { count: reportsCount, label: t.reportsCount },
+          { count: alertsCount, label: t.alertsCount },
+          { count: sosCount, label: t.sosCount },
         ].map((stat, i) => (
           <div key={i} className="flex-1 bg-pwa-surface rounded-xl py-3 flex flex-col items-center justify-center border border-pwa-border">
             <span className="text-2xl font-bold text-white mb-1">{stat.count}</span>
