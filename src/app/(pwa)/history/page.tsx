@@ -18,7 +18,7 @@ interface ReportItem {
 
 export default function HistoryPage() {
   const { language, userId, isLoggedIn } = useAppStore();
-  const t = translations[language];
+  const t = translations[language] as any;
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +103,7 @@ export default function HistoryPage() {
                     <p className="text-pwa-muted text-[11px] mt-0.5">{item.severity}</p>
                   </div>
                   <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full ml-2 shrink-0 bg-pwa-primary/10 text-pwa-primary">
-                    {new Date(item.created_at).toLocaleDateString()}
+                    {item.created_at ? item.created_at.split('T')[0] : ''}
                   </span>
                 </div>
                 <p className="text-pwa-muted text-[10px] mt-1.5">{item.location}</p>

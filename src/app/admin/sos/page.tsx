@@ -5,10 +5,7 @@ import {
   AlertTriangle, 
   Clock, 
   MapPin, 
-  Heart, 
-  Thermometer, 
   Check, 
-  UserCheck, 
   Search, 
   SlidersHorizontal,
   X,
@@ -21,8 +18,7 @@ import { playTone, playSuccessArpeggio, playWarningGong } from '@/lib/audio'
 
 export default function SOSQueue() {
   const sosRequests = useSentinelStore((state) => state.sosRequests)
-  const dispatchSOS = useSentinelStore((state) => state.dispatchSOS)
-  const resolveSOS = useSentinelStore((state) => state.resolveSOS)
+  const updateSOSStatus = useSentinelStore((state) => state.updateSOSStatus)
   const currentUser = useSentinelStore((state) => state.currentUser)
 
   // Local state controls
@@ -35,21 +31,18 @@ export default function SOSQueue() {
 
   // Filter queue items matching query
   const filteredQueue = sosRequests.filter((sos) => {
+    if (sos.status === 'RESOLVED') return false;
     const text = searchQuery.toLowerCase().trim()
     return (
       !text ||
-      sos.citizen_name.toLowerCase().includes(text) ||
-      sos.citizen_id.toLowerCase().includes(text) ||
-      sos.village.toLowerCase().includes(text)
+      String(sos.citizen_name).toLowerCase().includes(text) ||
+      String(sos.citizen_id).toLowerCase().includes(text) ||
+      String(sos.village).toLowerCase().includes(text)
     )
   })
 
-  const handleDispatchAction = (id: string) => {
-    dispatchSOS(id, etaValue)
-  }
-
-  const handleResolveAction = (id: string) => {
-    resolveSOS(id, currentUser.name)
+  const handleAction = async (id: string, newStatus: 'PENDING' | 'RESPONDING' | 'UNDER_OBSERVATION' | 'RESOLVED', logMessage: string) => {
+    await updateSOSStatus(id, newStatus, logMessage);
   }
 
   return (
@@ -131,11 +124,12 @@ export default function SOSQueue() {
                           <h3 className="text-xs font-bold text-white tracking-wide">{sos.citizen_name}</h3>
                           
                           <span className={`px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase ${
-                            sos.status === 'PENDING' ? 'bg-danger text-white animate-pulse' :
+                            (sos.status === 'PENDING' || sos.status === 'SUBMITTED') ? 'bg-danger text-white animate-pulse' :
                             sos.status === 'RESPONDING' ? 'bg-warning text-background' :
+                            sos.status === 'UNDER_OBSERVATION' ? 'bg-blue-500/20 text-blue-400' :
                             'bg-slate-700 text-slate-300'
                           }`}>
-                            {sos.status}
+                            {sos.status === 'RESPONDING' ? 'ASHA/PHC TEAM ASSIGNED' : sos.status}
                           </span>
 
                           <span className="text-[10px] text-primary/70 font-bold tracking-widest uppercase">
@@ -145,25 +139,30 @@ export default function SOSQueue() {
 
                         <p className="text-[11px] text-slate-300 mt-1 flex items-center gap-1 font-semibold">
                           <MapPin className="w-3.5 h-3.5 text-muted shrink-0" />
-                          <span>{sos.village}</span>
+                          <span>{sos.village === 'Unknown' ? 'Ward Not Classified' : sos.village}</span>
                         </p>
                       </div>
                     </div>
 
                     {/* Wait timer / Details status */}
                     <div className="text-right text-[10px] text-muted tracking-wider uppercase font-semibold">
-                      {sos.status === 'PENDING' && (
+                      {(sos.status === 'PENDING' || sos.status === 'SUBMITTED') && (
                         <span className="text-danger flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-danger shrink-0" /> Wait: {sos.created_at}
+                          <Clock className="w-3 h-3 text-danger shrink-0" /> REPORTED {sos.created_at}
                         </span>
                       )}
                       {sos.status === 'RESPONDING' && (
                         <span className="text-warning flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-warning shrink-0 animate-spin duration-3000" /> ETA: {sos.eta} min
+                          <Clock className="w-3 h-3 text-warning shrink-0 animate-spin duration-3000" /> RESPONDING
+                        </span>
+                      )}
+                      {sos.status === 'UNDER_OBSERVATION' && (
+                        <span className="text-blue-400 flex items-center gap-1">
+                          <Activity className="w-3 h-3 shrink-0" /> UNDER REVIEW
                         </span>
                       )}
                       {sos.status === 'RESOLVED' && (
-                        <span className="text-muted">Closed {sos.created_at}</span>
+                        <span className="text-muted">RESOLVED</span>
                       )}
                     </div>
 
@@ -198,18 +197,24 @@ export default function SOSQueue() {
             </div>
 
             {/* Profile Avatar Card */}
-            <div className="flex items-center gap-4 bg-surface/50 border border-border p-4 rounded-xl">
-              <img 
-                src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100" 
-                alt="John Doe Photo" 
-                className="w-12 h-12 rounded-lg object-cover border border-border"
-              />
+            <div className="flex flex-col gap-2 bg-surface/50 border border-border p-4 rounded-xl">
               <div>
                 <h4 className="text-lg font-bold text-white tracking-wide">{activeDossier.citizen_name}</h4>
-                <p className="text-[10px] text-muted font-semibold uppercase tracking-wider">ID: {activeDossier.citizen_id}</p>
-                <span className="px-1.5 py-0.5 rounded text-[8px] font-extrabold bg-success/10 text-success border border-success/35 uppercase flex items-center gap-0.5 mt-1.5 w-max">
-                  <UserCheck className="w-2.5 h-2.5" /> Verified Citizen
-                </span>
+                <p className="text-[10px] text-muted font-semibold uppercase tracking-wider">Case ID: {activeDossier.citizen_id}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-border/40">
+                <div>
+                  <span className="text-[9px] text-muted uppercase tracking-wider">Symptom/Disease</span>
+                  <p className="text-xs font-bold text-slate-200 uppercase">{activeDossier.disease}</p>
+                </div>
+                <div>
+                  <span className="text-[9px] text-muted uppercase tracking-wider">Severity</span>
+                  <p className={`text-xs font-bold uppercase ${activeDossier.severity === 'HIGH RISK' ? 'text-danger glow-red' : activeDossier.severity === 'MODERATE' ? 'text-warning' : 'text-success'}`}>{activeDossier.severity}</p>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-[9px] text-muted uppercase tracking-wider">Contact Number</span>
+                  <p className="text-xs font-bold text-slate-200">{activeDossier.contact_number}</p>
+                </div>
               </div>
             </div>
 
@@ -217,7 +222,7 @@ export default function SOSQueue() {
             <div className="space-y-1.5">
               <div className="flex justify-between items-center text-[10px] text-muted font-bold tracking-wider uppercase">
                 <span>Dispatch Location</span>
-                <span className="text-white">{activeDossier.latitude.toFixed(4)}, {activeDossier.longitude.toFixed(4)}</span>
+                <span className="text-white">{(activeDossier.latitude ?? 0).toFixed(4)}, {(activeDossier.longitude ?? 0).toFixed(4)}</span>
               </div>
               
               {/* Grayscale satellite screen map block */}
@@ -231,42 +236,12 @@ export default function SOSQueue() {
               </div>
             </div>
 
-            {/* Live Vitals tracking */}
-            <div className="space-y-2.5">
-              <span className="text-[10px] text-muted font-bold tracking-wider uppercase block">Live Vitals Monitoring</span>
-              
-              {/* Heart rate vitals */}
-              <div className="p-3 bg-surface/50 border border-border rounded-lg space-y-1.5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-muted flex items-center gap-1 uppercase font-semibold">
-                    <Heart className="w-3.5 h-3.5 text-danger animate-pulse shrink-0" /> Heart Rate
-                  </span>
-                  <strong className="text-sm font-bold text-white glow-red">{activeDossier.heart_rate} BPM</strong>
-                </div>
-                {/* Horizontal slider matching screenshot */}
-                <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all duration-500 ${activeDossier.heart_rate > 120 ? 'bg-danger w-[85%]' : 'bg-success w-[60%]'}`} />
-                </div>
-              </div>
 
-              {/* Body Temp Vitals */}
-              <div className="p-3 bg-surface/50 border border-border rounded-lg space-y-1.5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-muted flex items-center gap-1 uppercase font-semibold">
-                    <Thermometer className="w-3.5 h-3.5 text-warning shrink-0" /> Temperature
-                  </span>
-                  <strong className="text-sm font-bold text-white">{activeDossier.temperature} °C</strong>
-                </div>
-                <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-success w-[70%] rounded-full" />
-                </div>
-              </div>
-            </div>
 
             {/* Urgent Logs Timeline */}
             <div className="space-y-2">
               <span className="text-[10px] text-muted font-bold tracking-wider uppercase flex items-center gap-1">
-                <FileText className="w-3.5 h-3.5 text-primary" /> Incident Timeline
+                <FileText className="w-3.5 h-3.5 text-primary" /> Case Timeline
               </span>
               <div className="p-3 bg-surfaceLight/30 border border-border rounded-lg space-y-2.5 max-h-36 overflow-y-auto">
                 {activeDossier.urgent_logs.map((log, index) => (
@@ -283,41 +258,69 @@ export default function SOSQueue() {
           <div className="p-5 border-t border-border bg-[#0C1425] flex flex-col gap-2">
             
             {/* Context action controls */}
-            {activeDossier.status === 'PENDING' ? (
-              <button 
-                onClick={() => {
-                  playWarningGong()
-                  handleDispatchAction(activeDossier.id)
-                }}
-                className="w-full py-3 bg-white text-background font-extrabold text-xs uppercase tracking-wider rounded-lg hover:bg-slate-200 transition duration-150 shadow-md shadow-white/5 active:scale-[0.98]"
-              >
-                Dispatch Ambulance Unit
-              </button>
+            {activeDossier.status === 'PENDING' || activeDossier.status === 'SUBMITTED' ? (
+              activeDossier.severity === 'HIGH RISK' ? (
+                <>
+                  <button 
+                    onClick={() => { playWarningGong(); handleAction(activeDossier.id, 'RESPONDING', 'Start Response initiated for High-Risk outbreak.'); }}
+                    className="w-full py-2.5 bg-white text-background font-extrabold text-xs uppercase tracking-wider rounded-lg hover:bg-slate-200 transition shadow-md shadow-white/5"
+                  >Start Response</button>
+                  <button 
+                    onClick={() => { playWarningGong(); handleAction(activeDossier.id, 'RESPONDING', 'Field Team assigned to coordinate immediate response.'); }}
+                    className="w-full py-2.5 bg-danger text-white font-extrabold text-xs uppercase tracking-wider rounded-lg hover:bg-red-600 transition shadow-md shadow-danger/20"
+                  >Assign Field Team</button>
+                </>
+              ) : activeDossier.severity === 'MODERATE' ? (
+                <>
+                  <button 
+                    onClick={() => { playSuccessArpeggio(); handleAction(activeDossier.id, 'RESPONDING', 'ASHA Worker assigned for field follow-up.'); }}
+                    className="w-full py-2.5 bg-warning text-background font-extrabold text-xs uppercase tracking-wider rounded-lg hover:bg-yellow-500 transition shadow-md shadow-warning/15"
+                  >Assign ASHA Follow-Up</button>
+                  <button 
+                    onClick={() => { playSuccessArpeggio(); handleAction(activeDossier.id, 'RESPONDING', 'Scheduled for PHC Clinical Review.'); }}
+                    className="w-full py-2.5 bg-primary text-background font-extrabold text-xs uppercase tracking-wider rounded-lg hover:bg-cyan-500 transition shadow-md shadow-primary/15"
+                  >Schedule PHC Review</button>
+                  <button 
+                    onClick={() => { playTone(600, 'sine', 0.1, 0.05); handleAction(activeDossier.id, 'UNDER_OBSERVATION', 'Village Advisory issued for moderate outbreak risk.'); }}
+                    className="w-full py-2.5 bg-transparent border border-border text-slate-300 hover:text-white hover:bg-surfaceLight/30 font-extrabold text-xs uppercase tracking-wider rounded-lg transition"
+                  >Issue Village Advisory</button>
+                </>
+              ) : (
+                <>
+                  <button 
+                    onClick={() => { playSuccessArpeggio(); handleAction(activeDossier.id, 'RESPONDING', 'ASHA Worker assigned for routine follow-up.'); }}
+                    className="w-full py-2.5 bg-warning text-background font-extrabold text-xs uppercase tracking-wider rounded-lg hover:bg-yellow-500 transition shadow-md shadow-warning/15"
+                  >Assign ASHA Follow-Up</button>
+                  <button 
+                    onClick={() => { playSuccessArpeggio(); handleAction(activeDossier.id, 'UNDER_OBSERVATION', 'Hygiene Advisory sent to citizen contact.'); }}
+                    className="w-full py-2.5 bg-primary text-background font-extrabold text-xs uppercase tracking-wider rounded-lg hover:bg-cyan-500 transition shadow-md shadow-primary/15"
+                  >Send Hygiene Advisory</button>
+                  <button 
+                    onClick={() => { playTone(600, 'sine', 0.1, 0.05); handleAction(activeDossier.id, 'UNDER_OBSERVATION', 'Marked under observation.'); }}
+                    className="w-full py-2.5 bg-transparent border border-border text-slate-300 hover:text-white hover:bg-surfaceLight/30 font-extrabold text-xs uppercase tracking-wider rounded-lg transition"
+                  >Mark Under Observation</button>
+                </>
+              )
             ) : activeDossier.status === 'RESPONDING' ? (
+              <>
+                <button 
+                  onClick={() => { playSuccessArpeggio(); handleAction(activeDossier.id, 'UNDER_OBSERVATION', 'Patient marked under treatment.'); }}
+                  className="w-full py-3 bg-warning text-background font-extrabold text-xs uppercase tracking-wider rounded-lg hover:bg-yellow-500 transition duration-150 shadow-md shadow-warning/15 active:scale-[0.98]"
+                >Mark Under Treatment</button>
+              </>
+            ) : activeDossier.status === 'UNDER_OBSERVATION' ? (
               <button 
-                onClick={() => {
-                  playSuccessArpeggio()
-                  handleResolveAction(activeDossier.id)
-                }}
+                onClick={() => { playSuccessArpeggio(); handleAction(activeDossier.id, 'RESOLVED', 'Case officially resolved and closed by CHO.'); }}
                 className="w-full py-3 bg-success text-white font-extrabold text-xs uppercase tracking-wider rounded-lg hover:bg-success-hover transition duration-150 shadow-md shadow-success/15 active:scale-[0.98]"
-              >
-                Force Resolve Emergency
-              </button>
+              >Close Case File</button>
             ) : (
-              <div className="w-full py-2.5 bg-slate-800 text-slate-400 font-bold text-xs uppercase tracking-wider rounded-lg text-center border border-slate-700">
-                Incident Fully Closed
-              </div>
+              <div className="w-full py-2.5 bg-slate-800 text-slate-400 font-bold text-xs uppercase tracking-wider rounded-lg text-center border border-slate-700">Incident Fully Closed</div>
             )}
-
+            
             <button 
-              onClick={() => {
-                playTone(800, 'sine', 0.1, 0.05)
-                alert(`Pulling complete medical history charts for citizen: ${activeDossier.citizen_name}`)
-              }}
-              className="w-full py-2.5 bg-transparent border border-border text-slate-300 hover:text-white hover:bg-surfaceLight/30 text-xs font-semibold rounded-lg uppercase tracking-wider transition"
-            >
-              Medical History
-            </button>
+              onClick={() => { playTone(800, 'sine', 0.1, 0.05); alert(`Pulling recent field notes and observations for case: ${activeDossier.citizen_name}`); }}
+              className="w-full py-2.5 mt-2 bg-transparent border border-border text-slate-300 hover:text-white hover:bg-surfaceLight/30 text-xs font-semibold rounded-lg uppercase tracking-wider transition"
+            >Recent Field Notes</button>
           </div>
 
         </aside>

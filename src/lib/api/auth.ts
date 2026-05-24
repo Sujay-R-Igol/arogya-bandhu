@@ -10,11 +10,13 @@ export async function signupUser({
   password,
   role,
   ward,
+  phone,
 }: {
   username: string;
   password: string;
   role: string;
   ward: string;
+  phone?: string;
 }) {
   const hashed = await sha256(password);
   const { data, error } = await supabase!
@@ -24,8 +26,9 @@ export async function signupUser({
       password: hashed, // store a hashed password
       role,
       ward,
+      phone,
     })
-    .select('id, username, role, ward')
+    .select('id, username, role, ward, phone')
     .single();
 
   if (error) {
@@ -48,7 +51,7 @@ export async function loginUser({
   const hashed = await sha256(password);
   const { data, error } = await supabase!
     .from('users')
-    .select('id, username, role, ward')
+    .select('id, username, role, ward, phone')
     .eq('username', username)
     .eq('password', hashed)
     .single();

@@ -21,6 +21,8 @@ interface AppState {
   setDisplayName: (name: string) => void;
   ward: string;
   setWard: (ward: string) => void;
+  phone: string;
+  setPhone: (phone: string) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -45,6 +47,8 @@ export const useAppStore = create<AppState>()(
       setDisplayName: (name) => set({ displayName: name }),
       ward: '',
       setWard: (ward) => set({ ward }),
+      phone: '',
+      setPhone: (phone) => set({ phone }),
     }),
     {
       name: 'arogya-bandhu-storage',

@@ -16,51 +16,70 @@ import {
   Heart
 } from 'lucide-react'
 import { useSentinelStore } from '@/lib/store'
+import { supabaseClient } from '@/lib/supabase/client'
 import { playTone, playSuccessArpeggio } from '@/lib/audio'
 
 export default function AdvisoriesCMS() {
   const advisories = useSentinelStore((state) => state.advisories)
-  const createAdvisory = useSentinelStore((state) => state.createAdvisory)
-  const updateAdvisoryStatus = useSentinelStore((state) => state.updateAdvisoryStatus)
   const soundEnabled = useSentinelStore((state) => state.soundEnabled)
 
-  // Local state controls
-  const [selectedAdvId, setSelectedAdvId] = useState<string>('ADV-01') // Default to boil water notice
+  const [selectedAdvId, setSelectedAdvId] = useState<string>('')
   const [title, setTitle] = useState('')
-  const [content, setContent] = useState('')
-  const [category, setCategory] = useState<'CRITICAL' | 'WARNING' | 'ROUTINE'>('WARNING')
-  const [status, setStatus] = useState<'DRAFT' | 'PUBLISHED'>('DRAFT')
+  const [message, setMessage] = useState('')
+  const [category, setCategory] = useState('GENERAL_NOTICE')
+  const [affectedArea, setAffectedArea] = useState('Bhogadi')
+  const [mediaType, setMediaType] = useState<'none' | 'audio' | 'video'>('none')
+  const [mediaUrl, setMediaUrl] = useState('')
+  const [threatLevel, setThreatLevel] = useState<'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW'>('MODERATE')
+  const [status, setStatus] = useState<'DRAFT' | 'ACTIVE'>('DRAFT')
   const [authoringMode, setAuthoringMode] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Active advisory object
   const activeAdvisory = advisories.find(a => a.id === selectedAdvId) || advisories[0]
 
-  const handlePublishAdvisory = (e: React.FormEvent) => {
+  const handlePublishAdvisory = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!title.trim() || !content.trim()) return
+    if (!title.trim() || !message.trim()) return
 
-    createAdvisory({
+    setIsSubmitting(true)
+    const advToInsert = {
       title,
-      content,
+      message,
       category,
-      status
-    })
+      affected_area: affectedArea,
+      media_type: mediaType,
+      media_url: mediaType === 'none' ? null : mediaUrl,
+      threat_level: threatLevel,
+      issued_by: 'CHO Admin',
+      status,
+      created_at: new Date().toISOString()
+    }
+    
+    console.log('Submitting advisory payload:', advToInsert)
+    const { error } = await supabaseClient.from('advisories').insert(advToInsert)
+    setIsSubmitting(false)
+
+    if (error) {
+      console.error("Failed to insert advisory:", error)
+      return
+    }
 
     setAuthoringMode(false)
     setTitle('')
-    setContent('')
+    setMessage('')
+    setMediaUrl('')
     
-    // Automatically select the newly created advisory
     setTimeout(() => {
       const latest = useSentinelStore.getState().advisories[0]
       if (latest) setSelectedAdvId(latest.id)
-    }, 100)
+    }, 500)
   }
 
-  const toggleStatus = (id: string, current: 'DRAFT' | 'PUBLISHED') => {
-    const nextStatus = current === 'DRAFT' ? 'PUBLISHED' : 'DRAFT'
-    updateAdvisoryStatus(id, nextStatus)
+  const toggleStatus = async (id: string, current: string) => {
+    const nextStatus = current === 'DRAFT' ? 'ACTIVE' : 'DRAFT'
     playSuccessArpeggio()
+    await supabaseClient.from('advisories').update({ status: nextStatus }).eq('id', id)
   }
 
   return (
@@ -119,18 +138,53 @@ export default function AdvisoriesCMS() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-slate-300 font-bold mb-1.5 uppercase">Threat Classification</label>
+                    <label className="block text-slate-300 font-bold mb-1.5 uppercase">Threat Level</label>
+                    <select 
+                      value={threatLevel}
+                      onChange={(e) => setThreatLevel(e.target.value as any)}
+                      className="w-full p-2.5 bg-surfaceLight border border-border rounded text-xs text-white focus:outline-none"
+                    >
+                      <option value="CRITICAL">CRITICAL</option>
+                      <option value="HIGH">HIGH</option>
+                      <option value="MODERATE">MODERATE</option>
+                      <option value="LOW">LOW</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1.5 uppercase">Category</label>
                     <select 
                       value={category}
                       onChange={(e) => setCategory(e.target.value as any)}
                       className="w-full p-2.5 bg-surfaceLight border border-border rounded text-xs text-white focus:outline-none"
                     >
-                      <option value="CRITICAL">CRITICAL</option>
-                      <option value="WARNING">WARNING</option>
-                      <option value="ROUTINE">ROUTINE</option>
+                      <option value="OUTBREAK">OUTBREAK</option>
+                      <option value="WEATHER">WEATHER</option>
+                      <option value="SANITATION">SANITATION</option>
+                      <option value="VECTOR_CONTROL">VECTOR_CONTROL</option>
+                      <option value="RESPIRATORY">RESPIRATORY</option>
+                      <option value="GENERAL_NOTICE">GENERAL_NOTICE</option>
                     </select>
                   </div>
+                </div>
 
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1.5 uppercase">Affected Area</label>
+                    <select 
+                      value={affectedArea}
+                      onChange={(e) => setAffectedArea(e.target.value)}
+                      className="w-full p-2.5 bg-surfaceLight border border-border rounded text-xs text-white focus:outline-none"
+                    >
+                      <option value="Bhogadi">Bhogadi (All)</option>
+                      <option value="Bogadi 2nd Stage">Bogadi 2nd Stage</option>
+                      <option value="Hunsur Road">Hunsur Road</option>
+                      <option value="Vijayanagar">Vijayanagar</option>
+                      <option value="Hebbal">Hebbal</option>
+                      <option value="Yelwala">Yelwala</option>
+                      <option value="Mysuru Rural">Mysuru Rural</option>
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-slate-300 font-bold mb-1.5 uppercase">Publish Status</label>
                     <select 
@@ -139,18 +193,45 @@ export default function AdvisoriesCMS() {
                       className="w-full p-2.5 bg-surfaceLight border border-border rounded text-xs text-white focus:outline-none font-bold"
                     >
                       <option value="DRAFT">DRAFT</option>
-                      <option value="PUBLISHED">PUBLISHED IMMEDIATE</option>
+                      <option value="ACTIVE">ACTIVE IMMEDIATE</option>
                     </select>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1.5 uppercase">Media Type</label>
+                    <select 
+                      value={mediaType}
+                      onChange={(e) => setMediaType(e.target.value as any)}
+                      className="w-full p-2.5 bg-surfaceLight border border-border rounded text-xs text-white focus:outline-none"
+                    >
+                      <option value="none">None (Text Only)</option>
+                      <option value="audio">Audio Message</option>
+                      <option value="video">Video Message</option>
+                    </select>
+                  </div>
+                  {mediaType !== 'none' && (
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1.5 uppercase">Media URL</label>
+                      <input 
+                        type="url" 
+                        value={mediaUrl}
+                        onChange={(e) => setMediaUrl(e.target.value)}
+                        placeholder="https://..."
+                        className="w-full p-2.5 bg-surfaceLight border border-border rounded text-xs text-white placeholder-slate-500 focus:outline-none"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-slate-300 font-bold mb-1.5 uppercase">Instructional Content</label>
                   <textarea 
                     required
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    className="w-full p-2.5 bg-surfaceLight border border-border rounded text-xs text-white placeholder-slate-500 focus:outline-none h-36"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    className="w-full p-2.5 bg-surfaceLight border border-border rounded text-xs text-white placeholder-slate-500 focus:outline-none h-24"
                     placeholder="Type detailed health instructions for local ASHA workers and residents here..."
                   />
                 </div>
@@ -158,9 +239,10 @@ export default function AdvisoriesCMS() {
                 <div className="flex gap-3 pt-2">
                   <button 
                     type="submit" 
-                    className="flex-1 py-2.5 bg-primary text-background font-bold uppercase rounded-lg hover:bg-primary-hover transition duration-150 shadow-md shadow-primary/10"
+                    disabled={isSubmitting}
+                    className="flex-1 py-2.5 bg-primary text-background font-bold uppercase rounded-lg hover:bg-primary-hover transition duration-150 shadow-md shadow-primary/10 disabled:opacity-50"
                   >
-                    Save Bulletin
+                    {isSubmitting ? 'Saving...' : 'Save Bulletin'}
                   </button>
                   <button 
                     type="button" 
@@ -197,8 +279,8 @@ export default function AdvisoriesCMS() {
                       
                       <div className="flex gap-3">
                         <div className={`p-2 rounded-lg border flex items-center justify-center shrink-0 mt-0.5 ${
-                          adv.category === 'CRITICAL' ? 'bg-danger/10 border-danger/25 text-danger' :
-                          adv.category === 'WARNING' ? 'bg-warning/10 border-warning/25 text-warning' :
+                          adv.threat_level === 'CRITICAL' || adv.threat_level === 'HIGH' ? 'bg-danger/10 border-danger/25 text-danger' :
+                          adv.threat_level === 'MODERATE' ? 'bg-warning/10 border-warning/25 text-warning' :
                           'bg-primary/10 border-primary/25 text-primary'
                         }`}>
                           <FileText className="w-4.5 h-4.5" />
@@ -208,16 +290,17 @@ export default function AdvisoriesCMS() {
                           <div className="flex items-center gap-2">
                             <h3 className="text-xs font-bold text-white tracking-wide">{adv.title}</h3>
                             <span className={`px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase ${
-                              adv.category === 'CRITICAL' ? 'bg-danger text-white animate-pulse' :
-                              adv.category === 'WARNING' ? 'bg-warning text-background' :
+                              adv.threat_level === 'CRITICAL' ? 'bg-danger text-white animate-pulse' :
+                              adv.threat_level === 'HIGH' ? 'bg-danger text-white' :
+                              adv.threat_level === 'MODERATE' ? 'bg-warning text-background' :
                               'bg-primary/15 text-primary'
                             }`}>
-                              {adv.category}
+                              {adv.threat_level}
                             </span>
                           </div>
                           
                           <p className="text-[10.5px] text-slate-300 mt-1 truncate max-w-[280px]">
-                            {adv.content}
+                            {adv.message}
                           </p>
                         </div>
                       </div>
@@ -234,12 +317,12 @@ export default function AdvisoriesCMS() {
                             toggleStatus(adv.id, adv.status)
                           }}
                           className={`px-3 py-1 text-[9px] font-extrabold uppercase tracking-wider rounded transition-all duration-150 ${
-                            adv.status === 'PUBLISHED' 
+                            adv.status === 'ACTIVE' 
                               ? 'bg-slate-800 text-slate-400 hover:text-white border border-slate-700' 
                               : 'bg-primary text-background hover:bg-primary-hover shadow-sm shadow-primary/15'
                           }`}
                         >
-                          {adv.status === 'PUBLISHED' ? 'Revoke' : 'Publish'}
+                          {adv.status === 'ACTIVE' ? 'Revoke' : 'Publish'}
                         </button>
                       </div>
 
@@ -290,14 +373,14 @@ export default function AdvisoriesCMS() {
                   
                   {/* Category warning banner */}
                   <div className={`p-2.5 rounded-lg border text-[10px] ${
-                    activeAdvisory.category === 'CRITICAL' ? 'bg-danger/10 border-danger/30 text-danger-hover' :
-                    activeAdvisory.category === 'WARNING' ? 'bg-warning/10 border-warning/30 text-warning' :
+                    activeAdvisory.threat_level === 'CRITICAL' ? 'bg-danger/10 border-danger/30 text-danger-hover' :
+                    activeAdvisory.threat_level === 'HIGH' || activeAdvisory.threat_level === 'MODERATE' ? 'bg-warning/10 border-warning/30 text-warning' :
                     'bg-primary/5 border-primary/25 text-slate-300'
                   } flex items-start gap-2 leading-relaxed font-semibold`}>
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                     <div>
-                      <span className="font-bold block uppercase text-[8px] tracking-wider mb-0.5">{activeAdvisory.category} NOTICE</span>
-                      {activeAdvisory.category === 'CRITICAL' ? 'High severity health advisory active in your village area.' : 'General health surveillance protocol advice.'}
+                      <span className="font-bold block uppercase text-[8px] tracking-wider mb-0.5">{activeAdvisory.category} NOTICE - {activeAdvisory.affected_area}</span>
+                      {activeAdvisory.threat_level === 'CRITICAL' ? 'High severity health advisory active in your village area.' : 'General health surveillance protocol advice.'}
                     </div>
                   </div>
 
@@ -308,15 +391,21 @@ export default function AdvisoriesCMS() {
 
                   {/* Bulleting body text */}
                   <p className="text-[10px] text-slate-300 leading-relaxed max-h-56 overflow-y-auto border-t border-border/20 pt-2 whitespace-pre-wrap font-medium">
-                    {activeAdvisory.content}
+                    {activeAdvisory.message}
                   </p>
+                  
+                  {activeAdvisory.media_type !== 'none' && (
+                    <div className="mt-2 p-2 bg-slate-800 rounded flex items-center justify-between">
+                      <span className="text-[10px] text-white">Has attached {activeAdvisory.media_type}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Phone App Footer navigation */}
               <div className="border-t border-border/40 pt-2 mt-4 text-center">
                 <span className="text-[7.5px] text-slate-500 font-extrabold tracking-widest uppercase">
-                  Published {activeAdvisory.published_at || activeAdvisory.created_at}
+                  Published {activeAdvisory.created_at ? activeAdvisory.created_at.split('T')[0] : ''}
                 </span>
                 
                 <div className="h-1 w-24 bg-slate-700 rounded-full mx-auto mt-2" />

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { 
   Plus, 
   Search, 
@@ -14,12 +14,14 @@ import {
   Clock,
   User,
   Activity,
-  FileText,
+  ShieldAlert,
   ChevronDown,
-  Calendar
+  Calendar,
+  ActivitySquare
 } from 'lucide-react'
 import { useSentinelStore } from '@/lib/store'
 import { playTone, playSuccessArpeggio, playWarningGong } from '@/lib/audio'
+import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
 
 export default function SymptomDatabase() {
   const symptomReports = useSentinelStore((state) => state.symptomReports)
@@ -32,39 +34,33 @@ export default function SymptomDatabase() {
 
   // Local state controls
   const [selectedReport, setSelectedReport] = useState<any>(null)
-  const [alertActive, setAlertActive] = useState(true) // Triggers the overlay "Cluster Detected" banner from screenshot 1
   const [showManualForm, setShowManualForm] = useState(false)
   const [newCat, setNewCat] = useState('Acute Respiratory')
-  const [newOrigin, setNewOrigin] = useState('Al-Zahra West')
+  const [newOrigin, setNewOrigin] = useState('Bhogadi')
   const [newSev, setNewSev] = useState<'LOW RISK' | 'MODERATE' | 'HIGH RISK'>('HIGH RISK')
   const [newReporter, setNewReporter] = useState('CHO Manual Signal')
   const [newDetails, setNewDetails] = useState('')
 
   // Filtered reports calculation
   const filteredReports = symptomReports.filter((report) => {
-    // 1. Search text match
     const textQuery = searchQuery.toLowerCase().trim()
     const matchesQuery = 
       !textQuery ||
-      report.id.toLowerCase().includes(textQuery) ||
-      report.clinical_category.toLowerCase().includes(textQuery) ||
-      report.origin.toLowerCase().includes(textQuery) ||
-      report.reporter_name.toLowerCase().includes(textQuery)
+      String(report.id).toLowerCase().includes(textQuery) ||
+      String(report.clinical_category).toLowerCase().includes(textQuery) ||
+      String(report.origin).toLowerCase().includes(textQuery) ||
+      String(report.reporter_name).toLowerCase().includes(textQuery)
 
-    // 2. Village filter
     const matchesVillage = !filters.village || report.origin === filters.village
-
-    // 3. Severity filter
-    const matchesSeverity = !filters.symptom || report.severity === filters.symptom // Using filters.symptom mapping for simplicity
+    const matchesSeverity = !filters.symptom || report.severity === filters.symptom
 
     return matchesQuery && matchesVillage && matchesSeverity
   })
 
-  // Export CSV function: Converts reports to a download file locally
+  // Export CSV function
   const handleExportCSV = () => {
     playTone(900, 'sine', 0.1, 0.05)
     
-    // CSV Header definition
     const headers = ['ID', 'Timestamp', 'Clinical Category', 'Origin Village', 'Severity', 'Symptoms', 'Reporter', 'Details']
     const rows = filteredReports.map(r => [
       r.id,
@@ -83,7 +79,7 @@ export default function SymptomDatabase() {
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement("a")
     link.setAttribute("href", encodedUri)
-    link.setAttribute("download", `sentinel_surveillance_export_${new Date().toISOString().split('T')[0]}.csv`)
+    link.setAttribute("download", `phc_surveillance_export_${new Date().toISOString().split('T')[0]}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -99,14 +95,85 @@ export default function SymptomDatabase() {
       origin: newOrigin,
       severity: newSev,
       symptoms: ['Fever', 'Chills', 'Cough'],
-      latitude: 32.412,
-      longitude: 35.123,
+      latitude: 12.3345,
+      longitude: 76.6025,
       reporter_name: newReporter,
       details: newDetails || 'Manual clinical signal input by Chief Health Officer from Primary Health Centre (PHC).'
     })
     setShowManualForm(false)
     setNewDetails('')
   }
+
+  // Derived Analytics (Memoized)
+  const { 
+    activeHighRiskCount, 
+    mostAffectedWard, 
+    dominantDisease, 
+    lastReportTime, 
+    wardSurveillance, 
+    trendData 
+  } = useMemo(() => {
+    const activeHighRisk = symptomReports.filter(r => r.severity === 'HIGH RISK' && r.status !== 'RESOLVED');
+    
+    const wardCounts: Record<string, number> = {};
+    const diseaseCounts: Record<string, number> = {};
+    
+    activeHighRisk.forEach(r => {
+      wardCounts[r.origin] = (wardCounts[r.origin] || 0) + 1;
+      diseaseCounts[r.clinical_category] = (diseaseCounts[r.clinical_category] || 0) + 1;
+    });
+
+    const mostAffWard = Object.keys(wardCounts).sort((a, b) => wardCounts[b] - wardCounts[a])[0] || 'None';
+    const domDis = Object.keys(diseaseCounts).sort((a, b) => diseaseCounts[b] - diseaseCounts[a])[0] || 'None';
+    const lastReport = symptomReports[0]?.timestamp || 'N/A';
+
+    // Ward Surveillance Aggregation
+    const wardAggr: Record<string, { count: number; diseases: Record<string, number>; worstSeverity: string; lastUpdated: string }> = {};
+    symptomReports.forEach(r => {
+      if (!wardAggr[r.origin]) {
+        wardAggr[r.origin] = { count: 0, diseases: {}, worstSeverity: 'LOW RISK', lastUpdated: r.timestamp };
+      }
+      wardAggr[r.origin].count++;
+      wardAggr[r.origin].diseases[r.clinical_category] = (wardAggr[r.origin].diseases[r.clinical_category] || 0) + 1;
+      
+      if (r.severity === 'HIGH RISK') wardAggr[r.origin].worstSeverity = 'HIGH RISK';
+      else if (r.severity === 'MODERATE' && wardAggr[r.origin].worstSeverity === 'LOW RISK') {
+        wardAggr[r.origin].worstSeverity = 'MODERATE';
+      }
+    });
+
+    const wardSurv = Object.entries(wardAggr).map(([ward, data]) => {
+      const dDisease = Object.keys(data.diseases).sort((a, b) => data.diseases[b] - data.diseases[a])[0];
+      return {
+        ward,
+        count: data.count,
+        dominantDisease: dDisease,
+        worstSeverity: data.worstSeverity,
+        lastUpdated: data.lastUpdated
+      };
+    }).sort((a, b) => b.count - a.count);
+
+    // 7-Day Trend
+    const trendMap: Record<string, number> = {};
+    symptomReports.forEach(r => {
+      const dateStr = r.timestamp.split(',')[0] || 'Unknown';
+      trendMap[dateStr] = (trendMap[dateStr] || 0) + 1;
+    });
+    
+    const tData = Object.entries(trendMap)
+      .map(([date, cases]) => ({ date, cases }))
+      .reverse()
+      .slice(-7);
+
+    return {
+      activeHighRiskCount: activeHighRisk.length,
+      mostAffectedWard: mostAffWard,
+      dominantDisease: domDis,
+      lastReportTime: lastReport,
+      wardSurveillance: wardSurv,
+      trendData: tData
+    };
+  }, [symptomReports]);
 
   return (
     <div className="space-y-6 relative min-h-[calc(100vh-10rem)]">
@@ -183,10 +250,10 @@ export default function SymptomDatabase() {
                   onChange={(e) => setNewOrigin(e.target.value)}
                   className="w-full p-2 bg-surfaceLight border border-border rounded text-white focus:outline-none"
                 >
-                  <option value="Al-Zahra West">Al-Zahra West</option>
-                  <option value="North Ridge">North Ridge</option>
-                  <option value="Lower Delta">Lower Delta</option>
-                  <option value="Grand Pine Estates">Grand Pine Estates</option>
+                  <option value="Bhogadi">Bhogadi</option>
+                  <option value="Hebbal">Hebbal</option>
+                  <option value="Hunsur Road">Hunsur Road</option>
+                  <option value="Vijay Nagar">Vijay Nagar</option>
                 </select>
               </div>
             </div>
@@ -237,263 +304,273 @@ export default function SymptomDatabase() {
         </div>
       )}
 
-      {/* SEARCH AND INTERACTIVE ADVANCED FILTERS BAR */}
-      <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center">
-        
-        {/* Search */}
-        <div className="relative flex-1">
-          <Search className="absolute left-3 inset-y-0 my-auto w-4.5 h-4.5 text-muted" />
-          <input 
-            type="text" 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search clinical ledger, report IDs, reporters..." 
-            className="w-full pl-10 pr-4 py-2 bg-surface/50 border border-border/80 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-primary/80 transition duration-150"
-          />
-        </div>
-
-        {/* Filter tags controls */}
-        <div className="flex flex-wrap gap-2 items-center">
-          
-          {/* Village Filter dropdown */}
-          <select 
-            value={filters.village}
-            onChange={(e) => setFilters({ village: e.target.value })}
-            className="px-3 py-2 bg-surface/50 border border-border/80 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-primary transition"
-          >
-            <option value="">All Villages</option>
-            <option value="Al-Zahra West">Al-Zahra West</option>
-            <option value="North Ridge">North Ridge</option>
-            <option value="Lower Delta">Lower Delta</option>
-            <option value="Valley View North">Valley View North</option>
-            <option value="Grand Pine Estates">Grand Pine Estates</option>
-          </select>
-
-          {/* Severity filter (mapped to dynamic symptom category list) */}
-          <select 
-            value={filters.symptom}
-            onChange={(e) => setFilters({ symptom: e.target.value })}
-            className="px-3 py-2 bg-surface/50 border border-border/80 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-primary transition"
-          >
-            <option value="">All Severities</option>
-            <option value="HIGH RISK">HIGH RISK</option>
-            <option value="MODERATE">MODERATE</option>
-            <option value="LOW RISK">LOW RISK</option>
-          </select>
-
-          {/* Date range filter mock */}
-          <div className="px-3 py-2 bg-surface/50 border border-border/80 rounded-lg text-xs text-slate-300 flex items-center gap-1.5 cursor-pointer">
-            <SlidersHorizontal className="w-3.5 h-3.5 text-muted" />
-            <span>Last 7 Days</span>
-          </div>
-
-          {/* Clear filters badge */}
-          {(filters.village || filters.symptom || searchQuery) && (
-            <button 
-              onClick={clearFilters}
-              className="text-[10px] text-primary hover:text-white uppercase font-bold tracking-wider hover:underline"
-            >
-              Clear All
-            </button>
-          )}
-
-        </div>
-
-      </div>
-
-      {/* DYNAMIC SURVEILLANCE DATA TABLE */}
-      <div className="glass-card shadow-xl overflow-hidden border border-border/85">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-[#090E1A] text-slate-300 border-b border-border/80 font-bold uppercase tracking-wider text-[10px]">
-                <th className="p-4 w-28">ID</th>
-                <th className="p-4 w-40">TIMESTAMP</th>
-                <th className="p-4">CLINICAL CATEGORY</th>
-                <th className="p-4 w-48">ORIGIN VILLAGE</th>
-                <th className="p-4 w-36">SEVERITY</th>
-                <th className="p-4 w-20 text-center">ACTIONS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60 text-slate-300 font-medium">
-              {filteredReports.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="p-12 text-center text-muted font-normal">
-                    No clinical reports found matching current diagnostic filters.
-                  </td>
-                </tr>
-              ) : (
-                filteredReports.map((report) => (
-                  <tr key={report.id} className="hover:bg-surfaceLight/25 transition duration-150">
-                    <td className="p-4 font-bold text-white tracking-widest">{report.id}</td>
-                    <td className="p-4 flex items-center gap-1 text-slate-400">
-                      <Clock className="w-3.5 h-3.5 shrink-0 text-muted" />
-                      <span>{report.timestamp}</span>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full shrink-0 ${
-                          report.severity === 'HIGH RISK' ? 'bg-danger animate-pulse' : 
-                          report.severity === 'MODERATE' ? 'bg-warning' : 
-                          'bg-success'
-                        }`} />
-                        <span className="font-bold text-white">{report.clinical_category}</span>
-                      </div>
-                    </td>
-                    <td className="p-4 font-semibold text-slate-200">{report.origin}</td>
-                    <td className="p-4">
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold border ${
-                        report.severity === 'HIGH RISK' ? 'bg-danger/10 text-danger border-danger/25' :
-                        report.severity === 'MODERATE' ? 'bg-warning/10 text-warning border-warning/25' :
-                        'bg-success/10 text-success border-success/25'
-                      }`}>
-                        {report.severity}
-                      </span>
-                    </td>
-                    <td className="p-4 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button 
-                          onClick={() => {
-                            playTone(750, 'sine', 0.1, 0.05)
-                            setSelectedReport(report)
-                          }}
-                          title="Inspect signal detail"
-                          className="p-1.5 rounded bg-surfaceLight/60 border border-border/80 text-muted hover:text-white transition duration-100"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                        <button className="p-1.5 rounded bg-surfaceLight/60 border border-border/80 text-muted hover:text-white">
-                          <MoreHorizontal className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Paginated count bar */}
-        <div className="px-4 py-3 bg-[#090E1A] border-t border-border flex items-center justify-between text-[10px] text-muted tracking-wider uppercase font-semibold">
-          <span>Displaying {filteredReports.length} Active Records</span>
-          <span>PHC CLINICAL REGISTRY</span>
-        </div>
-      </div>
-
       {/* ==========================================
-          OVERLAP INTERACTIVE ALERT CARD (SCREENSHOT 1)
+          ACTIVE OUTBREAK SUMMARY CARD
           ========================================== */}
-      {alertActive && (
-        <div className="glass-card bg-[#0b111e]/95 border-danger/60 p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-[0_4px_30px_rgba(255,59,48,0.15)] animate-border-glow border-t-2 border-t-danger max-w-5xl mx-auto z-10 relative">
+      {symptomReports.length > 0 ? (
+        <div className={`glass-card p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-lg border-t-2 ${activeHighRiskCount > 0 ? 'bg-[#0b111e]/95 border-t-danger shadow-danger/10' : 'bg-surface/50 border-t-primary shadow-primary/5'} max-w-5xl mx-auto w-full z-10 relative rounded-xl`}>
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-xl bg-danger/10 border border-danger/25 flex items-center justify-center shrink-0 mt-1 animate-pulse">
-              <AlertTriangle className="w-5 h-5 text-danger" />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-1 ${activeHighRiskCount > 0 ? 'bg-danger/10 border border-danger/25 text-danger animate-pulse' : 'bg-primary/10 border border-primary/25 text-primary'}`}>
+              {activeHighRiskCount > 0 ? <AlertTriangle className="w-5 h-5" /> : <ShieldAlert className="w-5 h-5" />}
             </div>
             <div>
-              <span className="px-2 py-0.5 text-[8px] font-extrabold bg-danger text-white rounded tracking-widest uppercase animate-pulse">
-                HIGH SEVERITY ALERT
+              <span className={`px-2 py-0.5 text-[8px] font-extrabold text-white rounded tracking-widest uppercase ${activeHighRiskCount > 0 ? 'bg-danger' : 'bg-primary'}`}>
+                {activeHighRiskCount > 0 ? 'ACTIVE OUTBREAK WARNING' : 'SURVEILLANCE NORMAL'}
               </span>
-              <span className="text-[10px] text-muted ml-2 font-medium">Reported 12m ago</span>
+              <span className="text-[10px] text-muted ml-2 font-medium">Last synced: {lastReportTime}</span>
               <h3 className="text-sm font-bold text-white uppercase tracking-wider mt-1.5">
-                Cluster Detected: Al-Zahra West Corridor
+                {activeHighRiskCount > 0 ? 'High-Risk Signals Detected' : 'No Critical Clusters Detected'}
               </h3>
               <p className="text-[11px] text-slate-300 mt-1 leading-relaxed max-w-2xl">
-                Abnormal density of Acute Respiratory signals detected within a 500m radius. Predictive models indicate high velocity of spatial spread. Immediate field unit deployment recommended to secure origin coordinates.
+                {activeHighRiskCount > 0 
+                  ? `${activeHighRiskCount} active high-risk report${activeHighRiskCount > 1 ? 's' : ''} detected predominantly in ${mostAffectedWard === 'None' ? 'various wards' : mostAffectedWard}. The dominant clinical category is ${dominantDisease}.`
+                  : 'Symptom reports are currently within expected baseline thresholds.'
+                }
               </p>
             </div>
           </div>
 
-          <div className="flex gap-2.5 shrink-0 w-full md:w-auto">
+          <div className="flex flex-wrap gap-2.5 shrink-0 w-full md:w-auto">
             <button 
               onClick={() => {
                 playWarningGong()
-                alert('Ambulances & mobile health workers deployed coordinates Al-Zahra West!')
-                setAlertActive(false)
+                alert('ASHA workers in the affected wards have been notified.')
               }}
-              className="flex-1 md:flex-initial px-5 py-2.5 bg-danger text-white font-bold text-xs uppercase rounded hover:bg-danger-hover transition shadow-md shadow-danger/20"
+              className="flex-1 md:flex-initial px-4 py-2 bg-danger text-white font-bold text-[10px] uppercase rounded hover:bg-danger-hover transition shadow-md shadow-danger/20"
             >
-              Deploy Field Units
+              Notify ASHA Workers
             </button>
             <button 
-              onClick={() => setAlertActive(false)}
-              className="flex-1 md:flex-initial px-4 py-2.5 bg-slate-800 text-slate-300 font-semibold text-xs uppercase hover:bg-slate-700 hover:text-white rounded border border-slate-700 transition"
+              onClick={() => alert('PHC Advisory system triggered.')}
+              className="flex-1 md:flex-initial px-4 py-2 bg-slate-800 text-slate-300 font-semibold text-[10px] uppercase hover:bg-slate-700 hover:text-white rounded border border-slate-700 transition"
             >
-              Dismiss
+              Issue Advisory
+            </button>
+            <button 
+              onClick={() => alert('Ward marked for intensive monitoring.')}
+              className="flex-1 md:flex-initial px-4 py-2 bg-slate-800 text-slate-300 font-semibold text-[10px] uppercase hover:bg-slate-700 hover:text-white rounded border border-slate-700 transition"
+            >
+              Mark Under Monitoring
             </button>
           </div>
+        </div>
+      ) : (
+        <div className="glass-card p-6 bg-surface/50 border border-border/80 rounded-xl text-center">
+          <ActivitySquare className="w-8 h-8 text-muted mx-auto mb-2 opacity-50" />
+          <p className="text-sm font-bold text-white uppercase tracking-wider">No active outbreak signals detected</p>
+          <p className="text-xs text-muted mt-1">The symptom database is currently clear.</p>
         </div>
       )}
 
       {/* ==========================================
-          BOTTOM ROW DETAILS PANEL (SCREENSHOT 1)
+          BOTTOM ROW DETAILS PANEL
           ========================================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
-        
-        {/* SPATIAL SIGNAL DENSITY */}
-        <div className="lg:col-span-8 glass-card p-5 bg-surface/50 border border-border/80 rounded-xl relative overflow-hidden flex flex-col md:flex-row items-center gap-6">
-          {/* Grayscale map clip background mock style */}
-          <div className="w-full md:w-44 h-28 shrink-0 bg-slate-900 border border-border rounded-lg relative overflow-hidden flex items-center justify-center text-[10px] uppercase font-bold text-slate-600 tracking-wider">
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,#1b2640_1px,transparent_1px),linear-gradient(to_bottom,#1b2640_1px,transparent_1px)] bg-[size:1.5rem_1.5rem]" />
-            <div className="absolute w-8 h-8 rounded-full border border-danger/40 bg-danger/10 animate-ping" />
-            <MapPin className="w-5 h-5 text-danger relative z-10" />
-            <span className="absolute bottom-2 text-[9px] text-muted">Sector-4 Al-Zahra</span>
+      {symptomReports.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
+          
+          {/* WARD SURVEILLANCE PANEL */}
+          <div className="lg:col-span-8 glass-card bg-surface/50 border border-border/80 rounded-xl relative overflow-hidden flex flex-col h-72">
+            <div className="p-4 border-b border-border/60 shrink-0">
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider">Ward Surveillance Summary</h4>
+              <p className="text-[10px] text-muted mt-0.5">Aggregated clinical reports by location</p>
+            </div>
+            <div className="overflow-y-auto flex-1 p-2">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="text-slate-400 font-bold uppercase tracking-wider text-[9px] border-b border-border/40">
+                    <th className="p-3 w-1/3">Ward</th>
+                    <th className="p-3 text-center">Total Cases</th>
+                    <th className="p-3">Dominant Disease</th>
+                    <th className="p-3">Severity Status</th>
+                    <th className="p-3 text-right">Last Updated</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/30 text-slate-300 font-medium">
+                  {wardSurveillance.map((ward, idx) => (
+                    <tr key={idx} className="hover:bg-surfaceLight/30 transition">
+                      <td className="p-3 font-semibold text-slate-200">{ward.ward}</td>
+                      <td className="p-3 text-center font-bold text-white">{ward.count}</td>
+                      <td className="p-3">{ward.dominantDisease}</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold border ${
+                          ward.worstSeverity === 'HIGH RISK' ? 'bg-danger/10 text-danger border-danger/25' :
+                          ward.worstSeverity === 'MODERATE' ? 'bg-warning/10 text-warning border-warning/25' :
+                          'bg-success/10 text-success border-success/25'
+                        }`}>
+                          {ward.worstSeverity}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right text-[10px] text-muted">{ward.lastUpdated}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <h4 className="text-sm font-bold text-white uppercase tracking-wider">Spatial Signal Density Analysis</h4>
-            <p className="text-[11.5px] text-slate-300 leading-relaxed">
-              Real-time spatial mapping indicates a localized upward anomaly trend in Al-Zahra West. Clinical expansion algorithms suggest a <strong className="text-primary font-bold">24% probability</strong> of cluster expansion within the next epidemiological cycle (72 hours).
-            </p>
-            
-            {/* Health team reviews */}
-            <div className="flex items-center gap-2 pt-2 text-[10.5px] text-muted font-medium">
-              <div className="flex -space-x-2">
-                <img className="w-5.5 h-5.5 rounded-full border border-[#0B111E]" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50" alt="" />
-                <img className="w-5.5 h-5.5 rounded-full border border-[#0B111E]" src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=50" alt="" />
-              </div>
-              <span>Field units (+4 staff) are actively surveying coordinates.</span>
+          {/* 7-DAY REPORT TREND CHART */}
+          <div className="lg:col-span-4 glass-card p-5 bg-surface/50 border border-border/80 rounded-xl flex flex-col h-72">
+            <div className="shrink-0">
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider">7-Day Reporting Trend</h4>
+              <p className="text-[10px] text-muted mt-0.5">Aggregated report volume over time</p>
             </div>
+            <div className="flex-1 mt-4 w-full h-full min-h-[150px]">
+              {trendData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={trendData}>
+                    <XAxis 
+                      dataKey="date" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#64748b', fontSize: 10 }}
+                      dy={10}
+                    />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '6px', color: '#f8fafc', fontSize: '11px' }}
+                      itemStyle={{ color: '#3b82f6', fontWeight: 'bold' }}
+                      cursor={{fill: 'rgba(255,255,255,0.02)'}}
+                    />
+                    <Bar dataKey="cases" name="Reports" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-xs text-muted">Not enough data to display trend</div>
+              )}
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* SEARCH AND INTERACTIVE ADVANCED FILTERS BAR */}
+      {symptomReports.length > 0 && (
+        <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center mt-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 inset-y-0 my-auto w-4.5 h-4.5 text-muted" />
+            <input 
+              type="text" 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search clinical ledger, report IDs, reporters..." 
+              className="w-full pl-10 pr-4 py-2 bg-surface/50 border border-border/80 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-primary/80 transition duration-150"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2 items-center">
+            <select 
+              value={filters.village}
+              onChange={(e) => setFilters({ village: e.target.value })}
+              className="px-3 py-2 bg-surface/50 border border-border/80 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-primary transition"
+            >
+              <option value="">All Wards</option>
+              {Array.from(new Set(symptomReports.map(r => r.origin))).map(ward => (
+                <option key={ward} value={ward}>{ward}</option>
+              ))}
+            </select>
+
+            <select 
+              value={filters.symptom}
+              onChange={(e) => setFilters({ symptom: e.target.value })}
+              className="px-3 py-2 bg-surface/50 border border-border/80 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-primary transition"
+            >
+              <option value="">All Severities</option>
+              <option value="HIGH RISK">HIGH RISK</option>
+              <option value="MODERATE">MODERATE</option>
+              <option value="LOW RISK">LOW RISK</option>
+            </select>
+
+            {(filters.village || filters.symptom || searchQuery) && (
+              <button 
+                onClick={clearFilters}
+                className="text-[10px] text-primary hover:text-white uppercase font-bold tracking-wider hover:underline"
+              >
+                Clear All
+              </button>
+            )}
           </div>
         </div>
+      )}
 
-        {/* PEAK ACTIVITY BAR CHART */}
-        <div className="lg:col-span-4 glass-card p-5 bg-surface/50 border border-border/80 rounded-xl flex flex-col justify-between">
-          <div>
-            <h4 className="text-xs font-bold text-white uppercase tracking-wider">Peak Active Temporal Cycle</h4>
-            <p className="text-[10px] text-muted mt-0.5">Symptom submission load by hour</p>
+      {/* DYNAMIC SURVEILLANCE DATA TABLE */}
+      {symptomReports.length > 0 && (
+        <div className="glass-card shadow-xl overflow-hidden border border-border/85 mt-4">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-[#090E1A] text-slate-300 border-b border-border/80 font-bold uppercase tracking-wider text-[10px]">
+                  <th className="p-4 w-28">ID</th>
+                  <th className="p-4 w-40">TIMESTAMP</th>
+                  <th className="p-4">CLINICAL CATEGORY</th>
+                  <th className="p-4 w-48">ORIGIN WARD</th>
+                  <th className="p-4 w-36">SEVERITY</th>
+                  <th className="p-4 w-20 text-center">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60 text-slate-300 font-medium">
+                {filteredReports.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-12 text-center text-muted font-normal">
+                      No clinical reports found matching current diagnostic filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredReports.map((report) => (
+                    <tr key={report.id} className="hover:bg-surfaceLight/25 transition duration-150">
+                      <td className="p-4 font-bold text-white tracking-widest">{report.id}</td>
+                      <td className="p-4 flex items-center gap-1 text-slate-400">
+                        <Clock className="w-3.5 h-3.5 shrink-0 text-muted" />
+                        <span>{report.timestamp}</span>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${
+                            report.severity === 'HIGH RISK' ? 'bg-danger animate-pulse' : 
+                            report.severity === 'MODERATE' ? 'bg-warning' : 
+                            'bg-success'
+                          }`} />
+                          <span className="font-bold text-white">{report.clinical_category}</span>
+                        </div>
+                      </td>
+                      <td className="p-4 font-semibold text-slate-200">{report.origin}</td>
+                      <td className="p-4">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold border ${
+                          report.severity === 'HIGH RISK' ? 'bg-danger/10 text-danger border-danger/25' :
+                          report.severity === 'MODERATE' ? 'bg-warning/10 text-warning border-warning/25' :
+                          'bg-success/10 text-success border-success/25'
+                        }`}>
+                          {report.severity}
+                        </span>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button 
+                            onClick={() => {
+                              playTone(750, 'sine', 0.1, 0.05)
+                              setSelectedReport(report)
+                            }}
+                            title="Inspect signal detail"
+                            className="p-1.5 rounded bg-surfaceLight/60 border border-border/80 text-muted hover:text-white transition duration-100"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button className="p-1.5 rounded bg-surfaceLight/60 border border-border/80 text-muted hover:text-white">
+                            <MoreHorizontal className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
 
-          {/* Simple custom styled bars representing loading chart */}
-          <div className="flex items-end justify-between gap-1.5 h-24 pt-4 px-2">
-            <div className="flex flex-col items-center flex-1 gap-1">
-              <div className="w-full h-8 bg-slate-800 rounded-sm hover:bg-primary transition" />
-            </div>
-            <div className="flex flex-col items-center flex-1 gap-1">
-              <div className="w-full h-12 bg-slate-800 rounded-sm hover:bg-primary transition" />
-            </div>
-            <div className="flex flex-col items-center flex-1 gap-1">
-              <div className="w-full h-16 bg-slate-800 rounded-sm hover:bg-primary transition" />
-            </div>
-            <div className="flex flex-col items-center flex-1 gap-1">
-              <div className="w-full h-24 bg-primary rounded-sm shadow-md shadow-primary/20" />
-            </div>
-            <div className="flex flex-col items-center flex-1 gap-1">
-              <div className="w-full h-14 bg-slate-800 rounded-sm hover:bg-primary transition" />
-            </div>
-            <div className="flex flex-col items-center flex-1 gap-1">
-              <div className="w-full h-9 bg-slate-800 rounded-sm hover:bg-primary transition" />
-            </div>
-          </div>
-
-          <div className="flex justify-between items-center text-[9px] text-muted font-bold tracking-wider mt-2 border-t border-border/40 pt-1.5">
-            <span>12:00 AM</span>
-            <span className="text-primary font-extrabold">PEAK ACTIVITY</span>
-            <span>11:59 PM</span>
+          <div className="px-4 py-3 bg-[#090E1A] border-t border-border flex items-center justify-between text-[10px] text-muted tracking-wider uppercase font-semibold">
+            <span>Displaying {filteredReports.length} Active Records</span>
+            <span>PHC CLINICAL REGISTRY</span>
           </div>
         </div>
-
-      </div>
+      )}
 
       {/* ==========================================
           DETAILS INSPECTION EXPANDABLE DRAWER PANEL
@@ -515,7 +592,6 @@ export default function SymptomDatabase() {
               </button>
             </div>
 
-            {/* Time / Severity grid details */}
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="p-3 bg-surfaceLight/30 border border-border/60 rounded-lg">
                 <span className="text-muted block text-[10px] uppercase font-semibold">Timestamp</span>
@@ -537,7 +613,6 @@ export default function SymptomDatabase() {
               </div>
             </div>
 
-            {/* Diagnostic Categories */}
             <div className="p-3 bg-surfaceLight/30 border border-border/60 rounded-lg text-xs space-y-1">
               <span className="text-muted block text-[10px] uppercase font-semibold mb-1">Clinical Classification</span>
               <div className="flex items-center gap-2">
@@ -546,20 +621,18 @@ export default function SymptomDatabase() {
               </div>
             </div>
 
-            {/* Geographic Coordinates grid details */}
             <div className="p-3 bg-surfaceLight/30 border border-border/60 rounded-lg text-xs space-y-1.5 text-slate-300">
               <span className="text-muted block text-[10px] uppercase font-semibold mb-1.5">Spatial Origin</span>
               <div className="flex justify-between">
                 <span className="text-muted">Origin Coordinate:</span>
-                <span className="font-bold text-white">{selectedReport.latitude.toFixed(4)}, {selectedReport.longitude.toFixed(4)}</span>
+                <span className="font-bold text-white">{(selectedReport.latitude ?? 0).toFixed(4)}, {(selectedReport.longitude ?? 0).toFixed(4)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted flex items-center gap-1 text-[11px]"><MapPin className="w-3 h-3 text-primary" /> Village:</span>
+                <span className="text-muted flex items-center gap-1 text-[11px]"><MapPin className="w-3 h-3 text-primary" /> Ward:</span>
                 <span className="font-bold text-white">{selectedReport.origin}</span>
               </div>
             </div>
 
-            {/* Symptoms Tags */}
             <div className="space-y-1.5">
               <span className="text-muted block text-[10px] uppercase font-semibold">Symptom Signature</span>
               <div className="flex flex-wrap gap-1.5">
@@ -571,7 +644,6 @@ export default function SymptomDatabase() {
               </div>
             </div>
 
-            {/* Observation field notes */}
             <div className="p-3 bg-surfaceLight/20 border border-border/40 rounded-lg text-xs space-y-1 text-slate-300 leading-relaxed">
               <span className="text-muted block text-[10px] uppercase font-semibold flex items-center gap-1 mb-1">
                 <User className="w-3 h-3 text-primary" /> Field Observations ({selectedReport.reporter_name})
@@ -585,11 +657,11 @@ export default function SymptomDatabase() {
             <button 
               onClick={() => {
                 playWarningGong()
-                alert(`Ambulance & surveillance team sent coordinate ${selectedReport.origin}`)
+                alert(`Escalated case ${selectedReport.id} to PHC Response team.`)
               }}
               className="flex-1 py-2 text-center text-xs font-bold bg-danger text-white rounded hover:bg-danger-hover transition"
             >
-              Deploy Field Unit
+              Escalate to PHC
             </button>
             <button 
               onClick={() => setSelectedReport(null)}

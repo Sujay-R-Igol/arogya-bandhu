@@ -401,7 +401,7 @@ export default function DashboardLayout({
               <div className="p-3 bg-surfaceLight/40 rounded-lg border border-border/80 space-y-1.5 text-xs text-slate-300">
                 <div className="flex justify-between">
                   <span className="text-muted">Origin Coordinate:</span>
-                  <span className="font-bold text-white">{activeSOSAlert.latitude.toFixed(4)}, {activeSOSAlert.longitude.toFixed(4)}</span>
+                  <span className="font-bold text-white">{(activeSOSAlert.latitude ?? 0).toFixed(4)}, {(activeSOSAlert.longitude ?? 0).toFixed(4)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted">Origin Village:</span>

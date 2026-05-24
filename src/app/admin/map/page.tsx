@@ -134,7 +134,7 @@ export default function LiveMapPage() {
             {activeSOS.map((sos) => (
               <div 
                 key={sos.id} 
-                onClick={() => flyToCoordinates(sos.latitude, sos.longitude)}
+                onClick={() => flyToCoordinates(sos.latitude ?? 0, sos.longitude ?? 0)}
                 className="pt-2 flex justify-between items-start gap-2 cursor-pointer group hover:bg-surfaceLight/20 p-1.5 rounded transition"
               >
                 <div className="truncate">
@@ -154,7 +154,7 @@ export default function LiveMapPage() {
             {highRiskReports.map((rep) => (
               <div 
                 key={rep.id} 
-                onClick={() => flyToCoordinates(rep.latitude, rep.longitude)}
+                onClick={() => flyToCoordinates(rep.latitude ?? 0, rep.longitude ?? 0)}
                 className="pt-2 flex justify-between items-start gap-2 cursor-pointer group hover:bg-surfaceLight/20 p-1.5 rounded transition"
               >
                 <div className="truncate">

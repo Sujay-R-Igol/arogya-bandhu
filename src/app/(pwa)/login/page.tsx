@@ -9,7 +9,7 @@ import { translations } from '@/lib/i18n/translations';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { language, setIsLoggedIn, setUserId, setUsername, setRole, setDisplayName, setWard } = useAppStore();
+  const { language, setIsLoggedIn, setUserId, setUsername, setRole, setDisplayName, setWard, setPhone } = useAppStore();
   const t = translations[language] as any;
 
   const [usernameInput, setUsernameInput] = useState('');
@@ -29,6 +29,7 @@ export default function LoginPage() {
       setRole(user.role);
       setDisplayName(user.username);
       setWard(user.ward);
+      if (user.phone) setPhone(user.phone);
       setIsLoggedIn(true);
       router.replace('/home');
     } catch (err: any) {

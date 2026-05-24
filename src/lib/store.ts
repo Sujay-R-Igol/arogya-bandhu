@@ -2,6 +2,69 @@ import { create } from 'zustand'
 import { playNotificationChime, startEmergencyAlarm, stopEmergencyAlarm, playWarningGong, playSuccessArpeggio } from './audio'
 import { supabaseClient } from './supabase/client'
 
+export const BHOGADI_ZONES = [
+  { id: 'Bhogadi', label: 'Bhogadi (All)', lat: 12.3025, lng: 76.6025 },
+  { id: 'Bogadi 2nd Stage', label: 'Bogadi 2nd Stage', lat: 12.3080, lng: 76.6150 },
+  { id: 'Hunsur Road', label: 'Hunsur Road', lat: 12.3210, lng: 76.6200 },
+  { id: 'Vijayanagar', label: 'Vijayanagar', lat: 12.3250, lng: 76.6280 },
+  { id: 'Hebbal', label: 'Hebbal', lat: 12.3480, lng: 76.6180 },
+  { id: 'Yelwala', label: 'Yelwala', lat: 12.3550, lng: 76.5920 },
+  { id: 'Mysuru Rural', label: 'Mysuru Rural', lat: 12.3100, lng: 76.5850 }
+];
+
+export function getZoneAnchor(wardId: string) {
+  const zone = BHOGADI_ZONES.find(z => z.id === wardId);
+  if (zone) return { lat: zone.lat, lng: zone.lng };
+  return { lat: 12.3345, lng: 76.6190 };
+}
+
+export interface HotspotAnalytics {
+  zoneId: string;
+  name: string;
+  lat: number;
+  lng: number;
+  reportCount: number;
+  dominantSymptom: string;
+  severityLevel: 'LOW' | 'MODERATE' | 'ELEVATED' | 'OUTBREAK';
+}
+
+export function computeHotspots(reports: SymptomReport[]): HotspotAnalytics[] {
+  return BHOGADI_ZONES.map(zone => {
+    const zoneReports = reports.filter(r => r.origin === zone.id);
+    const count = zoneReports.length;
+    
+    // Calculate severity
+    const highRiskCount = zoneReports.filter(r => r.severity === 'HIGH RISK').length;
+    let severityLevel: HotspotAnalytics['severityLevel'] = 'LOW';
+    if (count > 0) severityLevel = 'MODERATE';
+    if (count >= 3 || highRiskCount >= 1) severityLevel = 'ELEVATED';
+    if (count >= 8 || highRiskCount >= 3) severityLevel = 'OUTBREAK';
+
+    // Calculate dominant symptom
+    const symptomCounts: Record<string, number> = {};
+    zoneReports.forEach(r => {
+      r.symptoms.forEach(s => {
+        symptomCounts[s] = (symptomCounts[s] || 0) + 1;
+      });
+    });
+    let dominantSymptom = 'N/A';
+    let max = 0;
+    for (const [sym, c] of Object.entries(symptomCounts)) {
+      if (c > max) { max = c; dominantSymptom = sym; }
+    }
+
+    return {
+      zoneId: zone.id,
+      name: zone.label,
+      lat: zone.lat,
+      lng: zone.lng,
+      reportCount: count,
+      dominantSymptom,
+      severityLevel
+    };
+  }).filter(h => h.reportCount > 0);
+}
+
 export interface SymptomReport {
   id: string
   timestamp: string
@@ -12,20 +75,23 @@ export interface SymptomReport {
   latitude: number | null
   longitude: number | null
   reporter_name: string
+  contact_number: string
   details: string
+  status: string
 }
 
 export interface SOSRequest {
   id: string
   citizen_name: string
   citizen_id: string
-  status: 'PENDING' | 'RESPONDING' | 'RESOLVED'
+  status: 'PENDING' | 'RESPONDING' | 'UNDER_OBSERVATION' | 'RESOLVED'
   created_at: string
   village: string
   latitude: number | null
   longitude: number | null
-  heart_rate: number | 'N/A'
-  temperature: number | 'N/A'
+  disease: string
+  severity: string
+  contact_number: string
   eta?: string
   handler_id?: string
   urgent_logs: string[]
@@ -34,10 +100,14 @@ export interface SOSRequest {
 export interface Advisory {
   id: string
   title: string
-  content: string
-  category: 'CRITICAL' | 'WARNING' | 'ROUTINE'
-  status: 'DRAFT' | 'PUBLISHED'
-  published_at?: string
+  message: string
+  category: string
+  affected_area: string
+  media_type: 'none' | 'audio' | 'video'
+  media_url?: string
+  threat_level: 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW'
+  issued_by: string
+  status: 'DRAFT' | 'ACTIVE'
   created_at: string
 }
 
@@ -79,6 +149,13 @@ interface SentinelState {
   fetchInitialReports: () => Promise<void>
   subscribeToReports: () => void
   unsubscribeFromReports: () => void
+  
+  // Realtime Advisories fetching
+  isLoadingAdvisories: boolean
+  advisoryFetchError: string | null
+  fetchAdvisories: () => Promise<void>
+  subscribeToAdvisories: () => void
+  unsubscribeFromAdvisories: () => void
 
   // Report database filters
   filters: {
@@ -94,8 +171,7 @@ interface SentinelState {
   // Actions
   triggerSymptomReport: (report: Omit<SymptomReport, 'id' | 'timestamp'>) => void
   triggerSOSRequest: (sos: Omit<SOSRequest, 'id' | 'created_at' | 'urgent_logs'>) => void
-  resolveSOS: (id: string, handlerName: string) => void
-  dispatchSOS: (id: string, eta: string) => void
+  updateSOSStatus: (id: string, status: 'PENDING' | 'RESPONDING' | 'UNDER_OBSERVATION' | 'RESOLVED', logMessage: string) => Promise<void>
   createAdvisory: (advisory: Omit<Advisory, 'id' | 'created_at'>) => void
   updateAdvisoryStatus: (id: string, status: 'DRAFT' | 'PUBLISHED') => void
   markNotificationsAsRead: () => void
@@ -142,17 +218,22 @@ function mapSupabaseToReport(row: any): SymptomReport {
     }
   }
 
+  const originWard = row.ward || 'Unknown';
+  const fallbackAnchor = getZoneAnchor(originWard);
+
   return {
     id: row.id || `live-${Math.random()}`,
     timestamp: new Date(row.created_at || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + new Date(row.created_at || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
     clinical_category: row.disease || 'Unknown',
-    origin: row.ward || 'Unknown',
+    origin: originWard,
     severity: mapSeverity(row.severity),
     symptoms: symptomsArr,
-    latitude: coords ? coords.lat : null,
-    longitude: coords ? coords.lng : null,
+    latitude: coords && coords.lat ? coords.lat : fallbackAnchor.lat,
+    longitude: coords && coords.lng ? coords.lng : fallbackAnchor.lng,
     reporter_name: row.username || row.reporter_type || 'Anonymous',
-    details: `People affected: ${row.people_count || 1}. Status: ${row.status || 'REPORTED'}`
+    contact_number: row.contact_number || 'Not Provided',
+    details: `People affected: ${row.people_count || 1}.`,
+    status: (row.status || 'PENDING').toUpperCase()
   }
 }
 
@@ -161,12 +242,13 @@ const initialReports: SymptomReport[] = []
 const initialSOS: SOSRequest[] = []
 
 let realtimeSubscription: any = null;
+let advisoriesSubscription: any = null;
 
 export const useSentinelStore = create<SentinelState>((set, get) => ({
   currentUser: {
-    name: 'Dr. Elena Vance',
-    title: 'Chief Health Officer',
-    image: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=200'
+    name: 'Bhogadi PHC Control Desk',
+    title: 'Primary Health Centre Surveillance Unit',
+    image: 'https://api.dicebear.com/7.x/shapes/svg?seed=BhogadiPHC&backgroundColor=0f172a&shape1Color=3b82f6'
   },
   setCurrentUser: (user) => set({ currentUser: user }),
   isAuthenticated: true, 
@@ -195,6 +277,8 @@ export const useSentinelStore = create<SentinelState>((set, get) => ({
   // Realtime Data Fetching
   isLoadingReports: false,
   reportFetchError: null,
+  isLoadingAdvisories: false,
+  advisoryFetchError: null,
 
   fetchInitialReports: async () => {
     set({ isLoadingReports: true, reportFetchError: null });
@@ -217,13 +301,14 @@ export const useSentinelStore = create<SentinelState>((set, get) => ({
             id: `SOS-${r.id}`,
             citizen_name: r.reporter_name,
             citizen_id: r.id,
-            status: 'PENDING' as const,
+            status: (r.status as any)?.toUpperCase() || 'PENDING',
             created_at: r.timestamp,
             village: r.origin,
             latitude: r.latitude,
             longitude: r.longitude,
-            heart_rate: 'N/A' as const,
-            temperature: 'N/A' as const,
+            disease: r.clinical_category,
+            severity: r.severity,
+            contact_number: r.contact_number,
             urgent_logs: [
               `${r.timestamp} - Derived SOS from HIGH RISK health report.`,
               `${r.timestamp} - Details: ${r.details}`
@@ -305,18 +390,25 @@ export const useSentinelStore = create<SentinelState>((set, get) => ({
 
               let newAdvisory = null;
               if (recentWardReports.length >= 3) {
-                // To avoid spam, check if we already have an active advisory for this ward
-                const exists = state.advisories.some(a => a.title.includes(newReport.origin) && a.status === 'PUBLISHED');
+                // To avoid spam, check if we already have a draft/active advisory for this ward
+                const exists = state.advisories.some(a => a.title.includes(newReport.origin) && (a.status === 'ACTIVE' || a.status === 'DRAFT'));
                 if (!exists) {
-                  newAdvisory = {
-                    id: `ADV-${Math.floor(100 + Math.random() * 900)}`,
+                  // We insert directly to Supabase so all clients see it
+                  const advToInsert = {
                     title: `Outbreak Warning - ${newReport.origin}`,
-                    content: `Automated detection: ${recentWardReports.length} severe/moderate reports clustered in ${newReport.origin}. Immediate surveillance recommended.`,
-                    category: 'CRITICAL' as const,
-                    status: 'PUBLISHED' as const,
-                    published_at: 'Just Now',
-                    created_at: 'Just Now'
+                    message: `Automated detection: ${recentWardReports.length} severe/moderate reports clustered in ${newReport.origin}. Immediate surveillance recommended.`,
+                    category: 'OUTBREAK',
+                    affected_area: newReport.origin,
+                    media_type: 'none',
+                    threat_level: 'HIGH',
+                    issued_by: 'Sentinel System',
+                    status: 'DRAFT'
                   };
+                  
+                  // Fire-and-forget insert
+                  supabaseClient.from('advisories').insert(advToInsert).then(({ error }) => {
+                    if (error) console.error("Failed to auto-create advisory:", error);
+                  });
                 }
               }
 
@@ -326,10 +418,29 @@ export const useSentinelStore = create<SentinelState>((set, get) => ({
                 ...(derivedSOS && { 
                   sosRequests: [derivedSOS, ...state.sosRequests],
                   activeSOSAlert: derivedSOS
-                }),
-                ...(newAdvisory && {
-                  advisories: [newAdvisory, ...state.advisories]
                 })
+              };
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedReport = mapSupabaseToReport(payload.new);
+            set((state) => {
+              const updatedReports = state.symptomReports.map(r => 
+                r.id === updatedReport.id ? updatedReport : r
+              );
+              
+              const updatedSOS = state.sosRequests.map(sos => {
+                if (sos.citizen_id === updatedReport.id) {
+                  return {
+                    ...sos,
+                    status: updatedReport.status as any
+                  };
+                }
+                return sos;
+              });
+
+              return {
+                symptomReports: updatedReports,
+                sosRequests: updatedSOS
               };
             });
           }
@@ -345,6 +456,55 @@ export const useSentinelStore = create<SentinelState>((set, get) => ({
       supabaseClient.removeChannel(realtimeSubscription);
       realtimeSubscription = null;
       set({ systemConnected: false });
+    }
+  },
+
+  fetchAdvisories: async () => {
+    set({ isLoadingAdvisories: true, advisoryFetchError: null });
+    try {
+      const { data, error } = await supabaseClient
+        .from('advisories')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        set({ advisories: data, isLoadingAdvisories: false });
+      }
+    } catch (error: any) {
+      console.error("Failed to fetch advisories:", error);
+      set({ advisoryFetchError: error.message, isLoadingAdvisories: false });
+    }
+  },
+
+  subscribeToAdvisories: () => {
+    if (advisoriesSubscription) return;
+
+    advisoriesSubscription = supabaseClient
+      .channel('public:advisories')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'advisories' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            set((state) => ({
+              advisories: [payload.new as Advisory, ...state.advisories]
+            }));
+          } else if (payload.eventType === 'UPDATE') {
+            set((state) => ({
+              advisories: state.advisories.map(a => a.id === payload.new.id ? (payload.new as Advisory) : a)
+            }));
+          }
+        }
+      )
+      .subscribe();
+  },
+
+  unsubscribeFromAdvisories: () => {
+    if (advisoriesSubscription) {
+      supabaseClient.removeChannel(advisoriesSubscription);
+      advisoriesSubscription = null;
     }
   },
 
@@ -389,86 +549,76 @@ export const useSentinelStore = create<SentinelState>((set, get) => ({
     })
   },
 
-  resolveSOS: (id, handlerName) => {
+  updateSOSStatus: async (id, status, logMessage) => {
+    // 1. Persist to Supabase
+    // Extract the raw health_reports UUID from the SOS- prefixed ID
+    const dbId = id.replace('SOS-', '');
+    
+    console.log('[DEBUG] updateSOSStatus Initiated');
+    console.log('[DEBUG] Original ID:', id);
+    console.log('[DEBUG] Parsed dbId:', dbId);
+    console.log('[DEBUG] Payload status:', status);
+
+    try {
+      const response = await supabaseClient
+        .from('health_reports')
+        .update({ status: status.toLowerCase() })
+        .eq('id', dbId)
+        .select();
+      
+      console.log('[DEBUG] Supabase Response:', response);
+
+      if (response.error) {
+        console.error('[DEBUG] Supabase Error updating SOS status:', response.error);
+      } else {
+        console.log('[DEBUG] Supabase Update Success, affected rows:', response.data?.length);
+      }
+    } catch (e) {
+      console.error('[DEBUG] Exception in updateSOSStatus:', e);
+    }
+
+    // 2. Update local state
     set((state) => {
-      let alarmActive = false
+      let alarmActive = false;
       const updatedSOS = state.sosRequests.map((sos) => {
         if (sos.id === id) {
-          const timestamp = new Date().toLocaleTimeString()
+          const timestamp = new Date().toLocaleTimeString();
           return {
             ...sos,
-            status: 'RESOLVED' as const,
-            handler_id: handlerName,
+            status,
             urgent_logs: [
               ...sos.urgent_logs,
-              `${timestamp} - SOS emergency officially resolved by Chief Health Officer.`,
-              `${timestamp} - Case closed.`
+              `${timestamp} - ${logMessage}`
             ]
-          }
+          };
         }
         if (sos.status === 'PENDING') {
-          alarmActive = true
+          alarmActive = true;
         }
-        return sos
-      })
+        return sos;
+      });
 
       if (!alarmActive) {
-        stopEmergencyAlarm()
-      } else if (state.soundEnabled) {
-        playSuccessArpeggio()
+        stopEmergencyAlarm();
+      } else if (status === 'RESOLVED' && state.soundEnabled) {
+        playSuccessArpeggio();
       }
 
       return {
         sosRequests: updatedSOS,
-        activeSOSAlert: state.activeSOSAlert?.id === id ? null : state.activeSOSAlert
-      }
-    })
-  },
-
-  dispatchSOS: (id, eta) => {
-    set((state) => {
-      const updatedSOS = state.sosRequests.map((sos) => {
-        if (sos.id === id) {
-          const timestamp = new Date().toLocaleTimeString()
-          return {
-            ...sos,
-            status: 'RESPONDING' as const,
-            eta,
-            handler_id: 'CHO Dispatch Center',
-            urgent_logs: [
-              ...sos.urgent_logs,
-              `${timestamp} - Ambulance dispatched. Est. Arrival: ${eta} minutes.`,
-              `${timestamp} - Dispatch tracking initiated.`
-            ]
-          }
-        }
-        return sos
-      })
-
-      let alarmActive = false
-      updatedSOS.forEach((s) => {
-        if (s.status === 'PENDING') alarmActive = true
-      })
-      if (!alarmActive) {
-        stopEmergencyAlarm()
-      } else {
-        playSuccessArpeggio()
-      }
-
-      return {
-        sosRequests: updatedSOS,
-        activeSOSAlert: state.activeSOSAlert?.id === id ? null : state.activeSOSAlert
-      }
-    })
+        activeSOSAlert: state.activeSOSAlert?.id === id && status === 'RESOLVED' ? null : state.activeSOSAlert
+      };
+    });
   },
 
   createAdvisory: (advisory) => {
+    // In a real implementation this would push to Supabase via an API or client.insert
+    // We are using a mock implementation here since CHO dashboard will have its own API
     const newAdv: Advisory = {
       ...advisory,
       id: `ADV-${Math.floor(10 + Math.random() * 90)}`,
-      created_at: 'Just Now',
-      published_at: advisory.status === 'PUBLISHED' ? 'Just Now' : undefined
-    }
+      created_at: new Date().toISOString()
+    } as Advisory;
 
     set((state) => ({
       advisories: [newAdv, ...state.advisories]
@@ -480,13 +630,13 @@ export const useSentinelStore = create<SentinelState>((set, get) => ({
   },
 
   updateAdvisoryStatus: (id, status) => {
+    // This is mocked for local state, actual update should hit Supabase
     set((state) => ({
       advisories: state.advisories.map((a) => {
         if (a.id === id) {
           return {
             ...a,
-            status,
-            published_at: status === 'PUBLISHED' ? 'Just Now' : undefined
+            status: status as 'DRAFT' | 'ACTIVE'
           }
         }
         return a

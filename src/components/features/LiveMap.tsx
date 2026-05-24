@@ -1,14 +1,14 @@
 'use client'
 
 import React, { useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, CircleMarker, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Tooltip, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import { useSentinelStore } from '@/lib/store'
+import { useSentinelStore, computeHotspots } from '@/lib/store'
 import { playTone } from '@/lib/audio'
 
-// Center coordinates around our village sector cluster
-const centerLat = 32.4120
-const centerLng = 35.1230
+// Center coordinates around our village sector cluster (Bhogadi/Mysuru)
+const centerLat = 12.3345
+const centerLng = 76.6190
 
 // Helper component to handle flying/panning to coordinates dynamically
 function ChangeMapView({ coords }: { coords: [number, number] }) {
@@ -26,6 +26,8 @@ export default function LiveMapComponent({
 }) {
   const symptomReports = useSentinelStore((state) => state.symptomReports)
   const sosRequests = useSentinelStore((state) => state.sosRequests)
+  
+  const dynamicHotspots = computeHotspots(symptomReports)
 
   // Custom DivIcon generator to create a glowing cyan diagnostic pulse
   const createReportIcon = (severity: string) => {
@@ -68,6 +70,12 @@ export default function LiveMapComponent({
       <MapContainer
         center={[centerLat, centerLng]}
         zoom={13}
+        maxBounds={[
+          [12.25, 76.50],
+          [12.45, 76.75]
+        ]}
+        maxBoundsViscosity={1.0}
+        minZoom={12}
         scrollWheelZoom={true}
         className="w-full h-full"
       >
@@ -85,7 +93,7 @@ export default function LiveMapComponent({
         {symptomReports.map((report) => (
           <Marker
             key={report.id}
-            position={[report.latitude, report.longitude]}
+            position={[report.latitude ?? 0, report.longitude ?? 0]}
             icon={createReportIcon(report.severity)}
             eventHandlers={{
               click: () => playTone(550, 'sine', 0.1, 0.05)
@@ -117,7 +125,7 @@ export default function LiveMapComponent({
           .map((sos) => (
             <Marker
               key={sos.id}
-              position={[sos.latitude, sos.longitude]}
+              position={[sos.latitude ?? 0, sos.longitude ?? 0]}
               icon={createSosIcon()}
               eventHandlers={{
                 click: () => playTone(650, 'sine', 0.1, 0.05)
@@ -142,18 +150,41 @@ export default function LiveMapComponent({
             </Marker>
           ))}
 
-        {/* 3. Heat indicators for Al-Zahra West outbreak severity (pulsing warning zones) */}
-        <CircleMarker
-          center={[32.4120, 35.1230]}
-          pathOptions={{ fillColor: '#FF3B30', fillOpacity: 0.1, color: '#FF3B30', weight: 1, dashArray: '4, 4' }}
-          radius={120}
-        />
-        
-        <CircleMarker
-          center={[32.4289, 35.1482]}
-          pathOptions={{ fillColor: '#FF9500', fillOpacity: 0.06, color: '#FF9500', weight: 1, dashArray: '4, 4' }}
-          radius={80}
-        />
+        {/* 3. Dynamic Heat indicators based on aggregated regional data */}
+        {dynamicHotspots.map((hotspot) => {
+          let color = '#34C759'; // LOW: Green
+          let radius = 60;
+          if (hotspot.severityLevel === 'MODERATE') { color = '#FFCC00'; radius = 80; } // Yellow
+          else if (hotspot.severityLevel === 'ELEVATED') { color = '#FF9500'; radius = 100; } // Orange
+          else if (hotspot.severityLevel === 'OUTBREAK') { color = '#FF3B30'; radius = 130; } // Red
+
+          return (
+            <CircleMarker
+              key={hotspot.zoneId}
+              center={[hotspot.lat, hotspot.lng]}
+              pathOptions={{ fillColor: color, fillOpacity: 0.15, color: color, weight: 1.5, dashArray: '4, 4' }}
+              radius={radius}
+            >
+              <Tooltip direction="top" offset={[0, -20]} opacity={1} className="custom-tooltip border border-border/50 bg-background/90 text-white p-2 backdrop-blur-md rounded-lg shadow-xl">
+                <div className="font-sans space-y-1 min-w-[120px]">
+                  <h4 className="font-bold text-xs uppercase text-slate-200 border-b border-border/50 pb-1">{hotspot.name}</h4>
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-slate-400">Total Cases:</span>
+                    <strong className="text-white">{hotspot.reportCount}</strong>
+                  </div>
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-slate-400">Main Disease:</span>
+                    <strong className="text-white uppercase">{hotspot.dominantSymptom}</strong>
+                  </div>
+                  <div className="flex justify-between text-[10px] items-center pt-1 mt-1 border-t border-border/50">
+                    <span className="text-slate-400">Status:</span>
+                    <span className="font-bold uppercase" style={{ color }}>{hotspot.severityLevel}</span>
+                  </div>
+                </div>
+              </Tooltip>
+            </CircleMarker>
+          );
+        })}
 
       </MapContainer>
     </div>

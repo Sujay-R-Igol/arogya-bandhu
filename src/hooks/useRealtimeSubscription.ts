@@ -73,10 +73,11 @@ export function useRealtimeSubscription() {
         }
       })
 
-    // Cleanup channels on unmount
     return () => {
-      supabase.removeChannel(reportsChannel)
-      supabase.removeChannel(sosChannel)
+      if (supabase) {
+        supabase.removeChannel(reportsChannel)
+        supabase.removeChannel(sosChannel)
+      }
     }
   }, [triggerSymptomReport, triggerSOSRequest, setSystemConnected])
 }

@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { ArrowLeft, Bug, Droplet, Thermometer, Activity, Droplets, Zap, PlusCircle, CheckCircle2, Globe, Mic, MapPin, ChevronRight } from 'lucide-react';
 import { useAppStore } from '@/lib/stores/appStore';
 import { translations } from '@/lib/i18n/translations';
+import { BHOGADI_ZONES, getZoneAnchor } from '@/lib/store';
 
 const diseases = [
   { id: 'dengue', emoji: '🦟', labelKey: 'dengue' },
@@ -33,7 +34,7 @@ const severities = [
 
 export default function ReportFlowPage() {
   const router = useRouter();
-  const { language, role, displayName, ward, userId } = useAppStore();
+  const { language, role, displayName, ward, userId, phone } = useAppStore();
   const t = translations[language] as any;
   const tKn = translations['kn'] as any;
 
@@ -42,7 +43,13 @@ export default function ReportFlowPage() {
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
   const [severity, setSeverity] = useState<string | null>(null);
   const [peopleCount, setPeopleCount] = useState(3);
+  const [selectedWard, setSelectedWard] = useState<string>(ward || 'Bhogadi');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const getWardCoordinates = (wardName: string) => {
+    const anchor = getZoneAnchor(wardName);
+    return `${anchor.lat}, ${anchor.lng}`;
+  };
 
   const handleSubmit = async () => {
     if (!selectedDisease || !severity) return;
@@ -55,11 +62,12 @@ export default function ReportFlowPage() {
           symptoms: selectedSymptoms,
           severity,
           people_count: peopleCount,
-          location: '12.9716° N, 77.5946° E',
+          location: getWardCoordinates(selectedWard),
           user_id: userId || null,
           reporter_type: role === 'ASHA Worker' ? 'asha' : role === 'Resident' ? 'resident' : 'anon',
           username: displayName,
-          ward,
+          ward: selectedWard,
+          contact_number: role === 'Anonymous Reporter' ? 'Contact Hidden' : (phone || 'Not Provided'),
         },
       ]);
     setIsSubmitting(false);
@@ -257,14 +265,23 @@ export default function ReportFlowPage() {
             </button>
 
             {/* Location */}
+            <p className="text-sm font-bold text-white mb-3 mt-6">Affected Location</p>
             <div className="w-full bg-pwa-surfaceLight border border-pwa-primary/30 rounded-2xl p-4 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-pwa-primary/20 flex items-center justify-center text-pwa-primary">
+              <div className="w-8 h-8 rounded-full bg-pwa-primary/20 flex items-center justify-center text-pwa-primary shrink-0">
                 <MapPin className="w-4 h-4" />
               </div>
-              <div className="text-left">
-                <div className="text-xs font-bold text-pwa-primary">Location Detected</div>
-                <div className="text-sm text-white font-mono">12.9716° N, 77.5946° E</div>
-                <div className="text-[10px] text-pwa-muted">ಸ್ಥಳ ಪತ್ತೆಯಾಗಿದೆ</div>
+              <div className="text-left w-full">
+                <div className="text-xs font-bold text-pwa-primary mb-1">Ward of Observation</div>
+                <select
+                  value={selectedWard}
+                  onChange={(e) => setSelectedWard(e.target.value)}
+                  className="w-full bg-transparent text-sm text-white font-mono outline-none appearance-none"
+                >
+                  {BHOGADI_ZONES.map((zone) => (
+                    <option key={zone.id} value={zone.id} className="text-black">{zone.label}</option>
+                  ))}
+                </select>
+                <div className="text-[10px] text-pwa-muted mt-1">ಬಾಧಿತ ಸ್ಥಳವನ್ನು ಆಯ್ಕೆಮಾಡಿ</div>
               </div>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { useAppStore } from '@/lib/stores/appStore';
 import { signupUser } from '@/lib/api/auth';
+import { BHOGADI_ZONES } from '@/lib/store';
 import { translations } from '@/lib/i18n/translations';
 import { BriefcaseMedical } from 'lucide-react';
 
@@ -17,12 +18,14 @@ export default function OnboardingPage() {
     setWard,
     setUserId,
     setUsername,
+    setPhone,
   } = useAppStore();
   const t = translations[language] as any;
 
   const [role, setLocalRole] = useState<string>('');
   const [name, setName] = useState<string>('');
   const [ward, setLocalWard] = useState<string>('');
+  const [phone, setLocalPhone] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -39,13 +42,14 @@ export default function OnboardingPage() {
     setError('');
 
     try {
-      const user = await signupUser({ username, password: finalPassword, role, ward });
+      const user = await signupUser({ username, password: finalPassword, role, ward, phone });
       // Populate store with returned user data
       setUserId(user.id);
       setUsername(user.username);
       setRole(user.role);
       setDisplayName(user.username);
       setWard(user.ward);
+      if (user.phone) setPhone(user.phone);
       setIsLoggedIn(true);
       router.replace('/home');
     } catch (e: any) {
@@ -94,22 +98,34 @@ export default function OnboardingPage() {
           
           <div className="space-y-3">
             {role !== 'Anonymous Reporter' && (
-              <input
-                type="text"
-                placeholder={t.displayNamePlaceholder || "Your Full Name"}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full p-4 rounded-xl bg-pwa-surface text-white placeholder-pwa-muted border-2 border-transparent focus:border-pwa-primary outline-none transition-colors"
-              />
+              <>
+                <input
+                  type="text"
+                  placeholder={t.displayNamePlaceholder || "Your Full Name"}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full p-4 rounded-xl bg-pwa-surface text-white placeholder-pwa-muted border-2 border-transparent focus:border-pwa-primary outline-none transition-colors"
+                />
+                <input
+                  type="tel"
+                  placeholder="Phone Number"
+                  value={phone}
+                  onChange={(e) => setLocalPhone(e.target.value)}
+                  className="w-full p-4 rounded-xl bg-pwa-surface text-white placeholder-pwa-muted border-2 border-transparent focus:border-pwa-primary outline-none transition-colors"
+                />
+              </>
             )}
             
-            <input
-              type="text"
-              placeholder={t.wardPlaceholder || "Ward of Observation (e.g. Hunsur)"}
+            <select
               value={ward}
               onChange={(e) => setLocalWard(e.target.value)}
-              className="w-full p-4 rounded-xl bg-pwa-surface text-white placeholder-pwa-muted border-2 border-transparent focus:border-pwa-primary outline-none transition-colors"
-            />
+              className="w-full p-4 rounded-xl bg-pwa-surface text-white placeholder-pwa-muted border-2 border-transparent focus:border-pwa-primary outline-none transition-colors appearance-none"
+            >
+              <option value="" disabled>Select Ward of Observation</option>
+              {BHOGADI_ZONES.map(zone => (
+                <option key={zone.id} value={zone.id}>{zone.label}</option>
+              ))}
+            </select>
 
             <input
               type="password"
@@ -124,7 +140,7 @@ export default function OnboardingPage() {
 
           <button
             onClick={handleSignup}
-            disabled={isSubmitting || !role || (!name && role !== 'Anonymous Reporter') || !password}
+            disabled={isSubmitting || !role || (!name && role !== 'Anonymous Reporter') || (!phone && role !== 'Anonymous Reporter') || !password}
             className="w-full mt-4 py-4 rounded-xl bg-pwa-primary text-pwa-bg font-bold shadow-lg disabled:opacity-50 transition-opacity"
           >
             {isSubmitting ? 'Creating Account...' : 'Create Account'}

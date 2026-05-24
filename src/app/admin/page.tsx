@@ -1,25 +1,35 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Calendar, RefreshCw, Compass, ArrowUpRight, ShieldCheck, Heart, AlertCircle, Send, Check } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Calendar, RefreshCw, Compass, ArrowUpRight, ShieldCheck, Heart, AlertCircle, Send, Check, Activity } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import DashboardStats from '@/components/features/DashboardStats'
 import { useSentinelStore } from '@/lib/store'
 import { playTone, playSuccessArpeggio } from '@/lib/audio'
+import { formatCaseId } from '@/lib/utils/formatters'
 
 // Dynamic trend data calculated in component
 export default function RegionalOverview() {
   const symptomReports = useSentinelStore((state) => state.symptomReports)
   const sosRequests = useSentinelStore((state) => state.sosRequests)
   const advisories = useSentinelStore((state) => state.advisories)
-  const dispatchSOS = useSentinelStore((state) => state.dispatchSOS)
-  const resolveSOS = useSentinelStore((state) => state.resolveSOS)
+  const updateSOSStatus = useSentinelStore((state) => state.updateSOSStatus)
   const soundEnabled = useSentinelStore((state) => state.soundEnabled)
   const currentUser = useSentinelStore((state) => state.currentUser)
   const fetchInitialReports = useSentinelStore((state) => state.fetchInitialReports)
   const subscribeToReports = useSentinelStore((state) => state.subscribeToReports)
 
   // Local state controls
+  const router = useRouter()
+  const fetchAdvisories = useSentinelStore((state) => state.fetchAdvisories)
+  const subscribeToAdvisories = useSentinelStore((state) => state.subscribeToAdvisories)
+
+  // Load advisories on mount and keep them in sync
+  useEffect(() => {
+    fetchAdvisories()
+    subscribeToAdvisories()
+  }, [])
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'core' | 'secondary'>('core')
 
@@ -79,10 +89,10 @@ export default function RegionalOverview() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white font-sans">
-            Regional Health Overview
+            Bhogadi PHC Dashboard
           </h1>
           <p className="text-xs text-muted mt-0.5">
-            Real-time clinical intelligence and spatial signal metrics across 12 monitoring sectors.
+            Real-time epidemiological surveillance and ward-level monitoring across Bhogadi.
           </p>
         </div>
 
@@ -253,10 +263,10 @@ export default function RegionalOverview() {
                         {adv.category}
                       </span>
                     </div>
-                    <p className="text-[10.5px] text-slate-300 mt-0.5 truncate max-w-[280px]">
-                      {adv.content}
-                    </p>
-                    <span className="text-[9px] text-muted mt-1 block">{adv.published_at || adv.created_at}</span>
+                      <p className="text-[10.5px] text-slate-300 mt-0.5 truncate max-w-[280px]">
+                        {adv.message}
+                      </p>
+                    <span className="text-[9px] text-muted mt-1 block">{adv.created_at}</span>
                   </div>
                 </div>
               ))}
@@ -264,7 +274,7 @@ export default function RegionalOverview() {
           </div>
           
           <div className="border-t border-border/40 mt-5 pt-3 text-[10px] text-muted uppercase tracking-wider text-center">
-            Sentinel operations room feed
+            Primary Health Centre Operations Feed
           </div>
         </div>
 
@@ -274,12 +284,12 @@ export default function RegionalOverview() {
             <div>
               <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-danger animate-pulse" />
-                Active SOS Monitor
+                Active High-Risk Reports
               </h3>
-              <p className="text-[10px] text-muted">First-response emergency triage board</p>
+              <p className="text-[10px] text-muted">Field response and case monitoring</p>
             </div>
             <span className="px-2 py-0.5 text-[9px] font-bold bg-danger/10 text-danger border border-danger/30 rounded-full tracking-widest uppercase animate-pulse">
-              Live Response Active
+              Outbreak Surveillance Active
             </span>
           </div>
 
@@ -328,48 +338,46 @@ export default function RegionalOverview() {
                     {/* Vitals Summary or Dispatch CTA */}
                     <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 border-border/40 pt-2.5 sm:pt-0">
                       
-                      {/* Vitals summary HUD */}
-                      <div className="flex gap-3 text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <Heart className="w-3.5 h-3.5 text-danger shrink-0" />
-                          <span className="font-semibold text-white">{sos.heart_rate}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-muted font-bold">TEMP:</span>
-                          <span className="font-semibold text-slate-200">{sos.temperature === 'N/A' ? 'N/A' : `${sos.temperature}°C`}</span>
-                        </div>
-                      </div>
-
-                      {/* Dispatch Trigger CTA button */}
-                      {sos.status === 'PENDING' ? (
+                      <div className="flex gap-2">
+                      {sos.status === 'PENDING' || sos.status === 'SUBMITTED' ? (
                         <button 
                           onClick={() => {
-                            dispatchSOS(sos.id, '04:12')
+                            updateSOSStatus(sos.id, 'RESPONDING', 'Response started for High-Risk case.')
                           }}
-                          className="px-3.5 py-1.5 bg-[#FF3B30] text-white font-bold text-[10px] tracking-wider uppercase rounded hover:bg-danger-hover transition shadow-sm shadow-danger/25"
+                          className="px-3.5 py-1.5 bg-white text-background font-bold text-[10px] tracking-wider uppercase rounded hover:bg-slate-200 transition flex items-center gap-1"
                         >
-                          DISPATCH
+                          <Send className="w-3 h-3" />
+                          START RESPONSE
+                        </button>
+                      ) : sos.status === 'RESPONDING' ? (
+                        <button 
+                          onClick={() => {
+                            updateSOSStatus(sos.id, 'UNDER_OBSERVATION', 'Patient marked under treatment.')
+                          }}
+                          className="px-3.5 py-1.5 bg-warning text-background font-bold text-[10px] tracking-wider uppercase rounded hover:bg-yellow-500 transition flex items-center gap-1"
+                        >
+                          <Activity className="w-3 h-3" />
+                          UNDER TREATMENT
                         </button>
                       ) : (
                         <button 
                           onClick={() => {
-                            resolveSOS(sos.id, currentUser.name)
+                            updateSOSStatus(sos.id, 'RESOLVED', 'Case officially closed.')
                           }}
                           className="px-3.5 py-1.5 bg-success text-white font-bold text-[10px] tracking-wider uppercase rounded hover:bg-success-hover transition flex items-center gap-1"
                         >
                           <Check className="w-3 h-3" />
-                          RESOLVE
+                          CLOSE CASE
                         </button>
                       )}
-
+                    </div>
                     </div>
 
                   </div>
                   
-                  {/* Wait timeline snippet */}
                   <div className="mt-3 flex items-center justify-between text-[9px] text-muted tracking-wider uppercase border-t border-border/30 pt-2">
-                    <span>CITIZEN ID: {sos.citizen_id}</span>
-                    <span>WAIT TIME: {sos.created_at}</span>
+                    <span>CASE ID: {formatCaseId(sos.citizen_id, 'BGD')}</span>
+                    <span>REPORT TIME: {sos.created_at}</span>
                   </div>
                 </div>
               ))
